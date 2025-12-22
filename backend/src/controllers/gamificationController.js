@@ -604,9 +604,37 @@ export const getAllBadges = async (req, res) => {
 
     const badgesWithProgress = badges.map((badge) => {
       const userBadge = userBadges.find((ub) => ub.badgeId === badge.id);
+
+      // FIX: Handle requirement value safely
+      let requirementValue = 0;
+
+      try {
+        // Jika requirement adalah string JSON, parse dulu
+        const requirement =
+          typeof badge.requirement === "string"
+            ? JSON.parse(badge.requirement)
+            : badge.requirement;
+
+        requirementValue = requirement?.value || 0;
+      } catch (error) {
+        console.warn(`Error parsing requirement for badge ${badge.id}:`, error);
+        requirementValue = 0;
+      }
+
+      console.log("Badge requirement structure:", {
+        badgeId: badge.id,
+        requirement: badge.requirement,
+        type: typeof badge.requirement,
+        parsed:
+          typeof badge.requirement === "string"
+            ? JSON.parse(badge.requirement)
+            : badge.requirement,
+      });
+
       return {
         ...badge.toJSON(),
         progress: userBadge?.progress || 0,
+        requirementValue: requirementValue, // Tambahkan field ini
         achieved: !!userBadge?.achievedAt,
         achievedAt: userBadge?.achievedAt,
       };
@@ -676,7 +704,7 @@ export const getLeaderboard = async (req, res) => {
     });
 
     // Dapatkan semua userId untuk query UserLevel
-    const userIds = entries.map(entry => entry.userId);
+    const userIds = entries.map((entry) => entry.userId);
 
     // Query UserLevel secara terpisah
     const userLevels = await UserLevel.findAll({
@@ -685,117 +713,138 @@ export const getLeaderboard = async (req, res) => {
       },
       raw: true,
     });
-    
+
     // Buat map untuk akses cepat
     const userLevelMap = {};
-    userLevels.forEach(ul => {
+    userLevels.forEach((ul) => {
       userLevelMap[ul.userId] = ul;
     });
 
     // **REAL-TIME CONVERSION: Konversi setiap entry dengan rate terbaru**
-    const formattedEntries = await Promise.all(entries.map(async (entry) => {
-      const user = entry.User;
-      const userLevel = userLevelMap[entry.userId];
-      
-      // Data dasar dari database
-      const baseData = {
-        rank: entry.rank,
-        userId: entry.userId,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          currency: user.currency,
-        },
-        totalProfitOriginal: parseFloat(entry.totalProfitOriginal),
-        originalCurrency: entry.originalCurrency,
-        totalTrades: entry.totalTrades,
-        winRate: parseFloat(entry.winRate),
-        dailyActivity: entry.dailyActivity,
-        consistencyScore: parseFloat(entry.consistencyScore),
-        isCurrentUser: entry.userId === parseInt(userId),
-      };
+    const formattedEntries = await Promise.all(
+      entries.map(async (entry) => {
+        const user = entry.User;
+        const userLevel = userLevelMap[entry.userId];
 
-      // **KONVERSI REAL-TIME**
-      let realTimeProfitUSD = parseFloat(entry.totalProfitUSD); // Default: cached value
-      let exchangeRateUsed = entry.lastExchangeRate || 1;
-      let conversionMethod = "cached";
-      let rateTimestamp = entry.exchangeRateUpdatedAt;
-      
-      try {
-        // Hanya lakukan konversi jika currency bukan USD
-        if (entry.originalCurrency !== "USD") {
-          const currentRate = await currencyService.getRateToUSD(entry.originalCurrency);
-          
-          // Hitung profit dengan rate terbaru
-          realTimeProfitUSD = await currencyService.convertToUSD(
-            entry.totalProfitOriginal,
-            entry.originalCurrency
-          );
-          
-          exchangeRateUsed = currentRate;
-          conversionMethod = "real-time";
-          rateTimestamp = new Date();
-          
-          // **OPTIONAL: Update cached value di background** (non-blocking)
-          // Hanya update jika perbedaan signifikan (> 0.5%)
-          const cachedProfit = parseFloat(entry.totalProfitUSD);
-          const difference = Math.abs((realTimeProfitUSD - cachedProfit) / cachedProfit);
-          
-          if (difference > 0.005) { // 0.5%
-            // Update di background, tidak perlu menunggu
-            PeriodLeaderboard.update(
-              {
-                totalProfitUSD: realTimeProfitUSD,
-                lastExchangeRate: currentRate,
-                exchangeRateUpdatedAt: new Date(),
-              },
-              {
-                where: { id: entry.id },
-                silent: true, // Tidak trigger hooks
-              }
-            ).catch(err => console.warn(`Background update failed for entry ${entry.id}:`, err.message));
+        // Data dasar dari database
+        const baseData = {
+          rank: entry.rank,
+          userId: entry.userId,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            currency: user.currency,
+          },
+          totalProfitOriginal: parseFloat(entry.totalProfitOriginal),
+          originalCurrency: entry.originalCurrency,
+          totalTrades: entry.totalTrades,
+          winRate: parseFloat(entry.winRate),
+          dailyActivity: entry.dailyActivity,
+          consistencyScore: parseFloat(entry.consistencyScore),
+          isCurrentUser: entry.userId === parseInt(userId),
+        };
+
+        // **KONVERSI REAL-TIME**
+        let realTimeProfitUSD = parseFloat(entry.totalProfitUSD); // Default: cached value
+        let exchangeRateUsed = entry.lastExchangeRate || 1;
+        let conversionMethod = "cached";
+        let rateTimestamp = entry.exchangeRateUpdatedAt;
+
+        try {
+          // Hanya lakukan konversi jika currency bukan USD
+          if (entry.originalCurrency !== "USD") {
+            const currentRate = await currencyService.getRateToUSD(
+              entry.originalCurrency
+            );
+
+            // Hitung profit dengan rate terbaru
+            realTimeProfitUSD = await currencyService.convertToUSD(
+              entry.totalProfitOriginal,
+              entry.originalCurrency
+            );
+
+            exchangeRateUsed = currentRate;
+            conversionMethod = "real-time";
+            rateTimestamp = new Date();
+
+            // **OPTIONAL: Update cached value di background** (non-blocking)
+            // Hanya update jika perbedaan signifikan (> 0.5%)
+            const cachedProfit = parseFloat(entry.totalProfitUSD);
+            const difference = Math.abs(
+              (realTimeProfitUSD - cachedProfit) / cachedProfit
+            );
+
+            if (difference > 0.005) {
+              // 0.5%
+              // Update di background, tidak perlu menunggu
+              PeriodLeaderboard.update(
+                {
+                  totalProfitUSD: realTimeProfitUSD,
+                  lastExchangeRate: currentRate,
+                  exchangeRateUpdatedAt: new Date(),
+                },
+                {
+                  where: { id: entry.id },
+                  silent: true, // Tidak trigger hooks
+                }
+              ).catch((err) =>
+                console.warn(
+                  `Background update failed for entry ${entry.id}:`,
+                  err.message
+                )
+              );
+            }
           }
+        } catch (error) {
+          console.warn(
+            `Real-time conversion failed for user ${entry.userId}:`,
+            error.message
+          );
+          // Fallback ke cached value
+          conversionMethod = "cached (fallback)";
         }
-      } catch (error) {
-        console.warn(`Real-time conversion failed for user ${entry.userId}:`, error.message);
-        // Fallback ke cached value
-        conversionMethod = "cached (fallback)";
-      }
 
-      // Data XP dan Streak
-      const level = entry.userLevel || (userLevel ? userLevel.level : 1);
-      const totalExperience = entry.totalExperience || (userLevel ? userLevel.totalExperience : 0);
-      const dailyStreak = entry.dailyStreak || (userLevel ? userLevel.dailyStreak : 0);
-      const totalTradesCount = entry.totalTradesUser || (userLevel ? userLevel.totalTrades : 0);
-      const profitStreak = entry.profitStreak || (userLevel ? userLevel.profitStreak : 0);
-      const maxConsecutiveWins = entry.maxConsecutiveWins || (userLevel ? userLevel.maxConsecutiveWins : 0);
+        // Data XP dan Streak
+        const level = entry.userLevel || (userLevel ? userLevel.level : 1);
+        const totalExperience =
+          entry.totalExperience || (userLevel ? userLevel.totalExperience : 0);
+        const dailyStreak =
+          entry.dailyStreak || (userLevel ? userLevel.dailyStreak : 0);
+        const totalTradesCount =
+          entry.totalTradesUser || (userLevel ? userLevel.totalTrades : 0);
+        const profitStreak =
+          entry.profitStreak || (userLevel ? userLevel.profitStreak : 0);
+        const maxConsecutiveWins =
+          entry.maxConsecutiveWins ||
+          (userLevel ? userLevel.maxConsecutiveWins : 0);
 
-      return {
-        ...baseData,
-        score: entry.score,
-        totalProfitUSD: realTimeProfitUSD,
-        totalTradesUser: totalTradesCount,
-        level: level,
-        totalExperience: totalExperience,
-        dailyStreak: dailyStreak,
-        profitStreak: profitStreak,
-        maxConsecutiveWins: maxConsecutiveWins,
-        
-        // **METADATA KONVERSI** (untuk debugging/transparansi)
-        conversionInfo: {
-          method: conversionMethod,
-          rateUsed: exchangeRateUsed,
-          rateUpdatedAt: rateTimestamp,
-          currency: entry.originalCurrency,
-        },
-      };
-    }));
+        return {
+          ...baseData,
+          score: entry.score,
+          totalProfitUSD: realTimeProfitUSD,
+          totalTradesUser: totalTradesCount,
+          level: level,
+          totalExperience: totalExperience,
+          dailyStreak: dailyStreak,
+          profitStreak: profitStreak,
+          maxConsecutiveWins: maxConsecutiveWins,
+
+          // **METADATA KONVERSI** (untuk debugging/transparansi)
+          conversionInfo: {
+            method: conversionMethod,
+            rateUsed: exchangeRateUsed,
+            rateUpdatedAt: rateTimestamp,
+            currency: entry.originalCurrency,
+          },
+        };
+      })
+    );
 
     // **REORDER BERDASARKAN PROFIT REAL-TIME** (Opsional, tapi penting untuk kompetisi fair)
     // Sort by real-time profit USD
     formattedEntries.sort((a, b) => b.totalProfitUSD - a.totalProfitUSD);
-    
+
     // Update rank berdasarkan real-time profit
     formattedEntries.forEach((entry, index) => {
       entry.realTimeRank = index + 1;
@@ -819,7 +868,7 @@ export const getLeaderboard = async (req, res) => {
         // Hitung real-time profit untuk current user
         let userRealTimeProfitUSD = parseFloat(userEntryRecord.totalProfitUSD);
         let userConversionMethod = "cached";
-        
+
         if (userEntryRecord.originalCurrency !== "USD") {
           try {
             userRealTimeProfitUSD = await currencyService.convertToUSD(
@@ -828,14 +877,18 @@ export const getLeaderboard = async (req, res) => {
             );
             userConversionMethod = "real-time";
           } catch (error) {
-            console.warn(`Real-time conversion for current user failed:`, error.message);
+            console.warn(
+              `Real-time conversion for current user failed:`,
+              error.message
+            );
           }
         }
 
         // Cari rank berdasarkan real-time profit
-        userRealTimeRank = formattedEntries.findIndex(
-          entry => entry.userId === parseInt(userId)
-        ) + 1;
+        userRealTimeRank =
+          formattedEntries.findIndex(
+            (entry) => entry.userId === parseInt(userId)
+          ) + 1;
 
         userEntry = {
           rank: userRealTimeRank, // Gunakan real-time rank
@@ -869,9 +922,11 @@ export const getLeaderboard = async (req, res) => {
     });
 
     // Get latest rates untuk semua mata uang yang ada di leaderboard
-    const uniqueCurrencies = [...new Set(formattedEntries.map(entry => entry.originalCurrency))];
+    const uniqueCurrencies = [
+      ...new Set(formattedEntries.map((entry) => entry.originalCurrency)),
+    ];
     const latestRates = {};
-    
+
     for (const currency of uniqueCurrencies) {
       if (currency !== "USD") {
         try {
@@ -879,7 +934,7 @@ export const getLeaderboard = async (req, res) => {
           latestRates[currency] = {
             rate: rate,
             timestamp: new Date().toISOString(),
-            source: "currency-api"
+            source: "currency-api",
           };
         } catch (error) {
           // Fallback ke rate dari database
@@ -891,12 +946,12 @@ export const getLeaderboard = async (req, res) => {
             },
             order: [["effectiveFrom", "DESC"]],
           });
-          
+
           if (dbRate) {
             latestRates[currency] = {
               rate: parseFloat(dbRate.rate),
               timestamp: dbRate.updatedAt,
-              source: dbRate.source
+              source: dbRate.source,
             };
           }
         }
@@ -915,16 +970,17 @@ export const getLeaderboard = async (req, res) => {
         totalPages: Math.ceil(totalCount / limit),
         currentPage: parseInt(page),
         availablePeriods: availablePeriods.map((p) => p.periodValue),
-        
+
         // **ENHANCED DISCLAIMER DENGAN REAL-TIME INFO**
         disclaimer: {
           title: "Real-time Currency Conversion",
-          message: "All profits are converted to USD using the latest exchange rates. Rankings update instantly with rate changes.",
+          message:
+            "All profits are converted to USD using the latest exchange rates. Rankings update instantly with rate changes.",
           conversionMethod: "real-time",
           note: "Cached values may be updated in the background for performance",
           timestamp: new Date().toISOString(),
         },
-        
+
         // **DETAILED RATE INFORMATION**
         exchangeRates: {
           current: latestRates,
@@ -936,12 +992,20 @@ export const getLeaderboard = async (req, res) => {
             source: rate.source,
           })),
         },
-        
+
         // **PERFORMANCE METRICS** (opsional, untuk debugging)
         performance: {
           conversionMethod: "real-time",
-          cacheHitRate: `${((formattedEntries.filter(e => e.conversionInfo.method.includes('cached')).length / formattedEntries.length) * 100).toFixed(1)}%`,
-          currenciesConverted: uniqueCurrencies.length - (uniqueCurrencies.includes('USD') ? 1 : 0),
+          cacheHitRate: `${(
+            (formattedEntries.filter((e) =>
+              e.conversionInfo.method.includes("cached")
+            ).length /
+              formattedEntries.length) *
+            100
+          ).toFixed(1)}%`,
+          currenciesConverted:
+            uniqueCurrencies.length -
+            (uniqueCurrencies.includes("USD") ? 1 : 0),
         },
       },
     });
@@ -957,24 +1021,28 @@ export const getLeaderboard = async (req, res) => {
 export const updateLeaderboardCachedRates = async (options = {}) => {
   try {
     const { force = false, silent = false } = options;
-    
+
     if (!silent) {
-      console.log(`🔄 Updating cached rates in leaderboard${force ? ' (force mode)' : ''}...`);
+      console.log(
+        `🔄 Updating cached rates in leaderboard${
+          force ? " (force mode)" : ""
+        }...`
+      );
     }
-    
+
     // Ambil semua entry leaderboard aktif
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
+
     const whereClause = {
       updatedAt: {
         [Op.gte]: thirtyDaysAgo,
       },
       originalCurrency: {
-        [Op.ne]: 'USD', // Hanya yang bukan USD
+        [Op.ne]: "USD", // Hanya yang bukan USD
       },
     };
-    
+
     // Jika force, abaikan timestamp terakhir
     if (!force) {
       whereClause[Op.or] = [
@@ -982,76 +1050,83 @@ export const updateLeaderboardCachedRates = async (options = {}) => {
         { exchangeRateUpdatedAt: { [Op.lt]: new Date(Date.now() - 3600000) } }, // > 1 jam lalu
       ];
     }
-    
+
     const entriesToUpdate = await PeriodLeaderboard.findAll({
       where: whereClause,
       limit: 1000,
     });
-    
+
     if (!silent) {
       console.log(`📊 Found ${entriesToUpdate.length} entries to update`);
     }
-    
+
     let updatedCount = 0;
     let failedCount = 0;
-    
+
     // Group by currency untuk optimasi API calls
     const currencyGroups = {};
-    entriesToUpdate.forEach(entry => {
+    entriesToUpdate.forEach((entry) => {
       if (!currencyGroups[entry.originalCurrency]) {
         currencyGroups[entry.originalCurrency] = [];
       }
       currencyGroups[entry.originalCurrency].push(entry);
     });
-    
+
     // Update per currency group
     for (const [currency, entries] of Object.entries(currencyGroups)) {
       try {
         // Dapatkan rate terbaru sekali untuk semua entries dengan currency yang sama
         const currentRate = await currencyService.getRateToUSD(currency);
-        
+
         for (const entry of entries) {
           try {
             // Konversi profit dengan rate terbaru
-            const realTimeProfitUSD = parseFloat(entry.totalProfitOriginal) * currentRate;
-            
+            const realTimeProfitUSD =
+              parseFloat(entry.totalProfitOriginal) * currentRate;
+
             // Update entry
             await entry.update({
               totalProfitUSD: realTimeProfitUSD,
               lastExchangeRate: currentRate,
               exchangeRateUpdatedAt: new Date(),
             });
-            
+
             updatedCount++;
           } catch (entryError) {
-            console.warn(`Failed to update entry ${entry.id}:`, entryError.message);
+            console.warn(
+              `Failed to update entry ${entry.id}:`,
+              entryError.message
+            );
             failedCount++;
           }
         }
-        
+
         // Small delay antara currency groups
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
+        await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (currencyError) {
-        console.warn(`Failed to update currency ${currency}:`, currencyError.message);
+        console.warn(
+          `Failed to update currency ${currency}:`,
+          currencyError.message
+        );
         failedCount += entries.length;
       }
     }
-    
+
     if (!silent) {
-      console.log(`✅ Updated ${updatedCount} cached rates, ${failedCount} failed`);
+      console.log(
+        `✅ Updated ${updatedCount} cached rates, ${failedCount} failed`
+      );
     }
-    
+
     return {
       updatedCount,
       failedCount,
       totalProcessed: entriesToUpdate.length,
       timestamp: new Date().toISOString(),
-      mode: force ? 'force' : 'standard',
+      mode: force ? "force" : "standard",
     };
-    
   } catch (error) {
-    console.error('❌ Error updating cached rates:', error);
+    console.error("❌ Error updating cached rates:", error);
     throw error;
   }
 };

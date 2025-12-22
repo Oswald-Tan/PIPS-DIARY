@@ -257,18 +257,33 @@ const Analytics = () => {
     });
 
     trades.forEach((entry) => {
-      if (!entry.date) return;
+      // PERBAIKAN: Gunakan createdAt yang berisi timestamp lengkap
+      const createdAt = entry.createdAt || entry.created_at || entry.created_at;
+      if (!createdAt) return;
 
-      const hour = new Date(entry.date).getHours();
+      try {
+        // Parse tanggal dari createdAt (format: "2025-12-19 05:34:18")
+        const dateTime = new Date(createdAt);
+        if (isNaN(dateTime.getTime())) return; // Jika parsing gagal
 
-      // Cari slot yang sesuai
-      const slot = timeSlots.find((s) => hour >= s.min && hour <= s.max);
-      if (!slot) return; // Jika tidak ditemukan (seharusnya tidak terjadi)
+        const hour = dateTime.getHours(); // Ambil jam lokal
 
-      timeStats[slot.name].profit += entry.profit || 0;
-      timeStats[slot.name].trades += 1;
-      if (entry.result?.toLowerCase().includes("win")) {
-        timeStats[slot.name].wins += 1;
+        // Debug: Log untuk memastikan data benar
+        console.log(
+          `Trade ${entry.id}: createdAt=${createdAt}, hour=${hour}, date=${entry.date}`
+        );
+
+        // Cari slot yang sesuai
+        const slot = timeSlots.find((s) => hour >= s.min && hour <= s.max);
+        if (!slot) return; // Jika tidak ditemukan (seharusnya tidak terjadi)
+
+        timeStats[slot.name].profit += entry.profit || 0;
+        timeStats[slot.name].trades += 1;
+        if (entry.result?.toLowerCase().includes("win")) {
+          timeStats[slot.name].wins += 1;
+        }
+      } catch (error) {
+        console.error("Error parsing createdAt:", createdAt, error);
       }
     });
 

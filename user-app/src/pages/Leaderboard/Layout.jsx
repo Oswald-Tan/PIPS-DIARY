@@ -23,6 +23,7 @@ import {
   Star,
   Zap,
   X,
+  ChevronDown,
 } from "lucide-react";
 
 const Layout = () => {
@@ -37,14 +38,14 @@ const Layout = () => {
   const [periodType, setPeriodType] = useState("monthly");
   const [periodValue, setPeriodValue] = useState("");
   const [showDisclaimer, setShowDisclaimer] = useState(true);
-  const [showFunNotice, setShowFunNotice] = useState(true); // State baru untuk notice
+  const [showFunNotice, setShowFunNotice] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // Konstanta untuk membatasi tampilan
-  const MAX_TOTAL_DISPLAY = 10; // Maksimal 10 trader yang ditampilkan
+  const MAX_TOTAL_DISPLAY = 10;
 
-  // Helper untuk mendapatkan data leaderboard yang konsisten - DIUBAH: Gunakan useMemo
+  // Helper untuk mendapatkan data leaderboard yang konsisten
   const leaderboardData = useMemo(() => {
     if (!leaderboard) return null;
 
@@ -60,13 +61,10 @@ const Layout = () => {
 
     // Jika ada data, buat salinan baru dan batasi jumlah leader yang ditampilkan
     if (data?.leaders && Array.isArray(data.leaders)) {
-      // Buat salinan baru tanpa memutasi objek asli
       return {
         ...data,
         leaders: data.leaders.slice(0, MAX_TOTAL_DISPLAY),
-        // Pastikan totalCount tidak berubah meskipun kita batasi tampilan
         originalTotalCount: data.totalCount || 0,
-        // Hitung berapa yang ditampilkan
         displayedCount: Math.min(data.leaders.length, MAX_TOTAL_DISPLAY),
       };
     }
@@ -112,7 +110,7 @@ const Layout = () => {
         getLeaderboard({
           periodType,
           periodValue,
-          limit: 50, // Tetap ambil 50 dari API, tapi kita filter di frontend
+          limit: 50,
           page: 1,
         })
       );
@@ -246,7 +244,7 @@ const Layout = () => {
       <Motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white/80 backdrop-blur-md rounded-3xl p-4 sm:p-6 border border-slate-200"
+        className="bg-white/80 backdrop-blur-md rounded-3xl p-4 sm:p-6 border border-slate-200 relative z-30"
       >
         <h3 className="text-lg sm:text-xl font-bold text-slate-800 mb-4 sm:mb-6 text-center">
           Top 3 {periodType.charAt(0).toUpperCase() + periodType.slice(1)}{" "}
@@ -357,20 +355,17 @@ const Layout = () => {
     );
   };
 
-  // Render leaderboard list - Hanya tampilkan rank 4-10 dengan tampilan sederhana
+  // Render leaderboard list
   const renderLeaderboardList = () => {
     if (!leaderboardData?.leaders || leaderboardData.leaders.length === 0) {
       return renderEmptyState();
     }
 
     const showTop3Separately = leaderboardData.leaders.length > 3;
-
-    // Ambil dari rank 4 sampai 10 (maksimal 7 di list)
     const listLeaders = showTop3Separately
-      ? leaderboardData.leaders.slice(3, MAX_TOTAL_DISPLAY) // Ambil index 3 sampai 9
+      ? leaderboardData.leaders.slice(3, MAX_TOTAL_DISPLAY)
       : [];
 
-    // Jika tidak ada user yang perlu ditampilkan di list
     if (listLeaders.length === 0) {
       return (
         <div className="text-center py-12">
@@ -403,7 +398,7 @@ const Layout = () => {
     return (
       <>
         {listLeaders.map((leader, index) => {
-          const rank = index + 4; // Karena dimulai dari rank 4
+          const rank = index + 4;
 
           return (
             <div
@@ -416,12 +411,12 @@ const Layout = () => {
             >
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-4 flex-1">
-                  {/* Rank - Sederhana */}
+                  {/* Rank */}
                   <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center shrink-0">
                     <span className="font-bold text-slate-700">#{rank}</span>
                   </div>
 
-                  {/* User Info - Hanya Nama */}
+                  {/* User Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h4 className="font-bold text-slate-800 truncate">
@@ -434,7 +429,6 @@ const Layout = () => {
                       )}
                     </div>
 
-                    {/* Level indicator sederhana */}
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-slate-500">
                         Level {leader.level || 1}
@@ -448,7 +442,7 @@ const Layout = () => {
                   </div>
                 </div>
 
-                {/* Stats - Hanya Profit USD */}
+                {/* Stats */}
                 <div className="text-right shrink-0">
                   <div className="text-lg font-bold text-slate-800 mb-1">
                     {formatCurrency(leader.totalProfitUSD || 0)}
@@ -459,7 +453,6 @@ const Layout = () => {
                 </div>
               </div>
 
-              {/* Minimal indicator untuk trades */}
               <div className="mt-2 text-xs text-slate-500">
                 {leader.totalTrades || 0} trades this period
               </div>
@@ -467,7 +460,7 @@ const Layout = () => {
           );
         })}
 
-        {/* Tambahkan indikator jika ada lebih banyak trader di luar top 10 */}
+        {/* Indikator jika ada lebih banyak trader */}
         {originalTotalCount > MAX_TOTAL_DISPLAY && (
           <div className="p-6 border-t border-slate-200 bg-slate-50 text-center">
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -494,7 +487,6 @@ const Layout = () => {
       return null;
     }
 
-    // Tentukan warna berdasarkan rank user
     const userRank = leaderboardData.userRank;
     let userGradient = "";
     if (userRank === 1) userGradient = "from-yellow-500 to-orange-600";
@@ -502,7 +494,6 @@ const Layout = () => {
     else if (userRank === 3) userGradient = "from-orange-500 to-orange-700";
     else userGradient = "from-violet-600 to-purple-600";
 
-    // Cek apakah user ada di top 10 atau tidak
     const isInTop10 = userRank <= MAX_TOTAL_DISPLAY;
     const originalTotalCount =
       leaderboardData.originalTotalCount || leaderboardData.totalCount || 0;
@@ -557,7 +548,7 @@ const Layout = () => {
       <Motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-blue-50 border border-blue-200 rounded-2xl p-4"
+        className="bg-blue-50 border border-blue-200 rounded-2xl p-4 relative z-30"
       >
         <div className="flex items-start gap-3">
           <Info className="w-5 h-5 text-blue-600 mt-0.5" />
@@ -604,7 +595,7 @@ const Layout = () => {
       <Motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-amber-50 border border-amber-200 rounded-2xl p-4"
+        className="bg-amber-50 border border-amber-200 rounded-2xl p-4 relative z-30"
       >
         <div className="flex items-start gap-3">
           <Sparkles className="w-5 h-5 text-amber-600 mt-0.5" />
@@ -634,7 +625,7 @@ const Layout = () => {
     );
   };
 
-  // Render period selector dengan custom dropdown
+  // Render period selector dengan dropdown yang fixed untuk mobile
   const renderPeriodSelector = () => {
     const periodOptions = [
       { id: "daily", label: "Daily", icon: <Calendar className="w-4 h-4" /> },
@@ -646,7 +637,6 @@ const Layout = () => {
       },
     ];
 
-    // Cek status untuk menentukan tampilan
     const hasAvailablePeriods = availablePeriods && availablePeriods.length > 0;
     const isLoading = isLoadingPeriods || isInitialLoad;
 
@@ -655,7 +645,6 @@ const Layout = () => {
       setIsDropdownOpen(false);
     };
 
-    // Format label untuk display
     const getDisplayLabel = () => {
       if (!periodValue) {
         if (isLoading) return "Loading...";
@@ -669,8 +658,22 @@ const Layout = () => {
       return selectedPeriod?.label || selectedPeriod || periodValue;
     };
 
+    // Close dropdown when clicking outside
+    useEffect(() => {
+      const handleClickOutside = (event) => {
+        if (isDropdownOpen && !event.target.closest('.period-selector-container')) {
+          setIsDropdownOpen(false);
+        }
+      };
+
+      document.addEventListener('click', handleClickOutside);
+      return () => {
+        document.removeEventListener('click', handleClickOutside);
+      };
+    }, [isDropdownOpen]);
+
     return (
-      <div className="bg-white/80 backdrop-blur-md rounded-3xl p-4 sm:p-6 border border-slate-200">
+      <div className="period-selector-container bg-white/80 backdrop-blur-md rounded-3xl p-4 sm:p-6 border border-slate-200 relative z-35">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           {/* Period Type Selector */}
           <div className="w-full lg:w-auto">
@@ -692,12 +695,15 @@ const Layout = () => {
             </div>
           </div>
 
-          {/* Period Value Selector - CUSTOM DROPDOWN */}
+          {/* Period Value Selector - DROPDOWN IMPROVED */}
           <div className="w-full lg:w-auto">
-            <div className="relative">
+            <div className="relative" style={{ isolation: "isolate" }}>
               {/* Custom dropdown trigger */}
               <button
-                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsDropdownOpen(!isDropdownOpen);
+                }}
                 disabled={isLoading || !hasAvailablePeriods}
                 className={`w-full lg:w-48 flex items-center justify-between bg-white border rounded-xl px-4 py-2.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all ${
                   isLoading
@@ -708,41 +714,54 @@ const Layout = () => {
                 }`}
               >
                 <span className="truncate">{getDisplayLabel()}</span>
-                <div className="ml-2">
+                <div className="ml-2 flex items-center">
                   {isLoading ? (
                     <Clock className="w-4 h-4 text-slate-400 animate-spin" />
                   ) : !hasAvailablePeriods ? (
                     <AlertCircle className="w-4 h-4 text-amber-500" />
                   ) : (
-                    <Calendar className="w-4 h-4 text-slate-500" />
+                    <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
                   )}
                 </div>
               </button>
 
-              {/* Custom dropdown menu */}
+              {/* Custom dropdown menu - FIXED for mobile, ABSOLUTE for desktop */}
               {isDropdownOpen && hasAvailablePeriods && !isLoading && (
-                <div className="absolute z-10 w-full lg:w-48 mt-1 bg-white border border-slate-300 rounded-xl shadow-lg">
-                  <div className="py-1 max-h-60 overflow-auto">
-                    {availablePeriods.map((period, index) => {
-                      const periodValue = period.value || period;
-                      const periodLabel = period.label || period;
+                <>
+                  {/* Dropdown menu */}
+                  <div 
+                    className="fixed lg:absolute left-4 right-4 lg:left-auto lg:right-auto lg:w-48 mt-1 bg-white border border-slate-300 rounded-xl shadow-lg z-9999 max-h-[60vh] overflow-hidden"
+                    style={{ 
+                      top: 'calc(100% + 8px)',
+                      transform: 'translateZ(0)',
+                      willChange: 'transform, opacity'
+                    }}
+                  >
+                    <div className="py-1 max-h-[60vh] overflow-y-auto">
+                      {availablePeriods.map((period, index) => {
+                        const periodValueOption = period.value || period;
+                        const periodLabel = period.label || period;
 
-                      return (
-                        <button
-                          key={index}
-                          onClick={() => handlePeriodSelect(periodValue)}
-                          className={`w-full px-4 py-2 text-left hover:bg-slate-50 ${
-                            periodValue === periodValue
-                              ? "bg-violet-50 text-violet-700"
-                              : "text-slate-700"
-                          }`}
-                        >
-                          {periodLabel}
-                        </button>
-                      );
-                    })}
+                        return (
+                          <button
+                            key={index}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePeriodSelect(periodValueOption);
+                            }}
+                            className={`w-full px-4 py-3 text-left hover:bg-slate-50 transition-colors ${
+                              periodValue === periodValueOption
+                                ? "bg-violet-50 text-violet-700 font-medium"
+                                : "text-slate-700"
+                            }`}
+                          >
+                            {periodLabel}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                </>
               )}
             </div>
           </div>
@@ -758,7 +777,6 @@ const Layout = () => {
     const originalTotalCount =
       leaderboardData?.originalTotalCount || leaderboardData?.totalCount || 0;
 
-    // Hitung yang ditampilkan (maksimal 10)
     const displayedCount = Math.min(
       leaderboardData?.leaders?.length || 0,
       MAX_TOTAL_DISPLAY
@@ -821,6 +839,7 @@ const Layout = () => {
         <Motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
+          className="relative z-30"
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex-1 min-w-0">
@@ -836,7 +855,7 @@ const Layout = () => {
           </div>
         </Motion.div>
 
-        {/* Fun Notice - Baru ditambahkan */}
+        {/* Fun Notice */}
         {renderFunNotice()}
 
         {/* Disclaimer */}
@@ -847,13 +866,13 @@ const Layout = () => {
 
         {/* Leaderboard Content */}
         <div className="space-y-6">
-          {/* Top 3 - Hanya ditampilkan jika ada data */}
+          {/* Top 3 */}
           {leaderboardData?.leaders &&
             leaderboardData.leaders.length > 0 &&
             renderTop3()}
 
           {/* Full Leaderboard List */}
-          <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200 overflow-hidden">
+          <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200 overflow-hidden relative z-30">
             {/* Header dengan status indicator */}
             <div className="p-4 sm:p-6 border-b border-slate-200">
               {renderStatusIndicator()}
@@ -892,7 +911,7 @@ const Layout = () => {
                 : renderLeaderboardList()}
             </div>
 
-            {/* User Rank Footer - Hanya ditampilkan jika user ada di leaderboard */}
+            {/* User Rank Footer */}
             {renderUserRank()}
           </div>
         </div>

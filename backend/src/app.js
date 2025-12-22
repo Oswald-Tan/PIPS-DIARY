@@ -28,6 +28,7 @@ import Subscription from "./routes/subscriptionRoute.js";
 import Gamification from "./routes/gamificationRoute.js";
 import CalenderEvent from "./routes/calendarRoutes.js";
 import Transaction from "./routes/transactionRoutes.js";
+import ManualRate from "./routes/manualRateRoute.js";
 
 // Import controllers
 import {
@@ -258,6 +259,7 @@ app.use("/api/v1/subscription", Subscription);
 app.use("/api/v1/gamification", Gamification);
 app.use("/api/v1/calendar", CalenderEvent);
 app.use("/api/v1/transactions", Transaction);
+app.use('/api/v1/manual-rates', ManualRate);
 
 // ==================== CRON JOBS ====================
 const setupCronJobs = () => {

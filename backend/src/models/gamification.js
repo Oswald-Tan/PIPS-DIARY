@@ -1,71 +1,7 @@
 import { DataTypes } from "sequelize";
 import db from "../config/database.js";
 import User from "./user.js";
-
-const ExchangeRate = db.define(
-  "ExchangeRate",
-  {
-    id: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true,
-    },
-    fromCurrency: {
-      type: DataTypes.STRING(10), // GANTI dari ENUM ke STRING untuk support lebih banyak currency
-      allowNull: false,
-      validate: {
-        len: [2, 10],
-      },
-    },
-    toCurrency: {
-      type: DataTypes.STRING(10), // GANTI dari ENUM ke STRING
-      allowNull: false,
-      validate: {
-        len: [2, 10],
-      },
-    },
-    rate: {
-      type: DataTypes.DECIMAL(20, 12), // Presisi lebih tinggi
-      allowNull: false,
-    },
-    effectiveFrom: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW,
-    },
-    effectiveTo: {
-      type: DataTypes.DATE,
-      allowNull: true,
-    },
-    isActive: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: true,
-    },
-    source: {
-      type: DataTypes.ENUM("api", "manual", "system"),
-      defaultValue: "api",
-    },
-    lastUpdated: {
-      type: DataTypes.DATE,
-      allowNull: true,
-    },
-  },
-  {
-    timestamps: true,
-    tableName: "exchange_rates",
-    indexes: [
-      {
-        fields: ["fromCurrency", "toCurrency", "isActive"],
-      },
-      {
-        fields: ["effectiveFrom"],
-      },
-      {
-        fields: ["lastUpdated"],
-      },
-    ],
-  }
-);
+import ExchangeRate from "./exchangeRate.js";
 
 // Ubah MonthlyLeaderboard menjadi PeriodLeaderboard
 const PeriodLeaderboard = db.define(

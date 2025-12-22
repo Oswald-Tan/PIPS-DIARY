@@ -310,21 +310,6 @@ const Targets = ({ onShowTargetModal = () => {} }) => {
                 Set and track your trading goals
               </p>
             </div>
-
-            {/* Tampilkan badge plan */}
-            {subscription && subscription.plan !== "free" && (
-              <div className="flex items-center gap-2">
-                <div
-                  className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    subscription.plan === "pro"
-                      ? "bg-violet-100 text-violet-800"
-                      : "bg-amber-100 text-amber-800"
-                  }`}
-                >
-                  {subscription.plan === "pro" ? "PRO" : "LIFETIME"}
-                </div>
-              </div>
-            )}
           </Motion.div>
 
           {/* Empty State */}

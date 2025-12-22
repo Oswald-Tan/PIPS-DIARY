@@ -270,6 +270,7 @@ export const handleLogin = async (req, res) => {
     }
 
     if (
+      user.userRole.role_name !== "super_admin" &&
       user.userRole.role_name !== "admin" &&
       user.userRole.role_name !== "user"
     ) {

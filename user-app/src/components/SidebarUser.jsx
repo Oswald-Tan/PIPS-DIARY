@@ -25,7 +25,7 @@ import {
   Calendar,
 } from "lucide-react";
 
-const SidebarUser = () => {
+const Sidebar = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -408,4 +408,4 @@ const SidebarUser = () => {
   );
 };
 
-export default SidebarUser;
+export default Sidebar;

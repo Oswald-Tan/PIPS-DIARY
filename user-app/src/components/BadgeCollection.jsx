@@ -30,7 +30,7 @@ const BadgeCollection = () => {
 
   const getBadgeIcon = (iconName, color) => {
     const iconProps = { className: "w-6 h-6", color };
-    
+
     switch (iconName) {
       case "crown":
         return <Crown {...iconProps} />;
@@ -93,13 +93,34 @@ const BadgeCollection = () => {
     }
   };
 
-  const filteredBadges = badges.filter(badge => {
+  // Tambahkan fungsi helper di bagian atas komponen
+const getRequirementValue = (badge) => {
+  // Coba beberapa cara untuk mendapatkan nilai requirement
+  if (badge.requirementValue !== undefined) return badge.requirementValue;
+  
+  if (badge.requirement && typeof badge.requirement === 'object') {
+    return badge.requirement.value || 0;
+  }
+  
+  if (typeof badge.requirement === 'string') {
+    try {
+      const parsed = JSON.parse(badge.requirement);
+      return parsed.value || 0;
+    } catch (error) {
+      console.log('Failed to parse requirement:', error);
+      console.warn('Failed to parse requirement:', badge.requirement);
+    }
+  }
+  
+  return 0; // Fallback
+};
+
+  const filteredBadges = badges.filter((badge) => {
     if (activeFilter === "all") return true;
     return badge.type === activeFilter;
   });
 
-  const achievedBadges = badges.filter(badge => badge.achieved);
-  const lockedBadges = badges.filter(badge => !badge.achieved);
+  const achievedBadges = badges.filter((badge) => badge.achieved);
 
   if (isLoading) {
     return (
@@ -134,7 +155,8 @@ const BadgeCollection = () => {
           {/* Info Progress di samping untuk desktop */}
           <div className="hidden lg:block text-right">
             <div className="text-sm text-slate-600 mb-1">
-              {Math.round((achievedBadges.length / badges.length) * 100)}% Complete
+              {Math.round((achievedBadges.length / badges.length) * 100)}%
+              Complete
             </div>
           </div>
         </div>
@@ -142,9 +164,7 @@ const BadgeCollection = () => {
         {/* Progress Bar - Full width di mobile */}
         <div className="w-full">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-sm font-medium text-slate-700">
-              Progress
-            </span>
+            <span className="text-sm font-medium text-slate-700">Progress</span>
             <span className="text-sm font-medium text-slate-700 lg:hidden">
               {Math.round((achievedBadges.length / badges.length) * 100)}%
             </span>
@@ -152,9 +172,11 @@ const BadgeCollection = () => {
           <div className="w-full bg-slate-200 rounded-full h-3">
             <Motion.div
               initial={{ width: 0 }}
-              animate={{ width: `${(achievedBadges.length / badges.length) * 100}%` }}
+              animate={{
+                width: `${(achievedBadges.length / badges.length) * 100}%`,
+              }}
               transition={{ duration: 1, ease: "easeOut" }}
-              className="h-3 rounded-full bg-gradient-to-r from-violet-600 to-purple-600"
+              className="h-3 rounded-full bg-linear-to-r from-violet-600 to-purple-600"
             />
           </div>
           {/* Info persentase untuk desktop sudah ada di atas */}
@@ -163,21 +185,23 @@ const BadgeCollection = () => {
 
       {/* Filter Tabs */}
       <div className="flex flex-wrap gap-2 mb-6">
-        {["all", "consistency", "profit", "milestone", "achievement"].map((filter) => (
-          <Motion.button
-            key={filter}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setActiveFilter(filter)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium capitalize transition-all ${
-              activeFilter === filter
-                ? "bg-violet-600 text-white shadow-sm"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            {filter === "all" ? "All Badges" : filter}
-          </Motion.button>
-        ))}
+        {["all", "consistency", "profit", "milestone", "achievement"].map(
+          (filter) => (
+            <Motion.button
+              key={filter}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setActiveFilter(filter)}
+              className={`px-4 py-2 rounded-xl text-sm font-medium capitalize transition-all ${
+                activeFilter === filter
+                  ? "bg-violet-600 text-white shadow-sm"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              }`}
+            >
+              {filter === "all" ? "All Badges" : filter}
+            </Motion.button>
+          )
+        )}
       </div>
 
       {/* Badges Grid */}
@@ -201,15 +225,20 @@ const BadgeCollection = () => {
                   badge.achieved ? "bg-white" : "bg-slate-200"
                 }`}
               >
-                {getBadgeIcon(badge.icon, badge.achieved ? badge.color : "#9ca3af")}
+                {getBadgeIcon(
+                  badge.icon,
+                  badge.achieved ? badge.color : "#9ca3af"
+                )}
               </div>
             </div>
 
             {/* Badge Info */}
             <div className="text-center">
-              <h4 className={`font-bold text-sm mb-1 ${
-                badge.achieved ? "text-slate-800" : "text-slate-500"
-              }`}>
+              <h4
+                className={`font-bold text-sm mb-1 ${
+                  badge.achieved ? "text-slate-800" : "text-slate-500"
+                }`}
+              >
                 {badge.name}
               </h4>
               <p className="text-xs text-slate-600 mb-2 line-clamp-2">
@@ -223,12 +252,15 @@ const BadgeCollection = () => {
                     <div
                       className="h-1.5 rounded-full bg-violet-500"
                       style={{
-                        width: `${(badge.progress / badge.requirement.value) * 100}%`,
+                        width: `${Math.min(
+                          100,
+                          (badge.progress / getRequirementValue(badge)) * 100
+                        )}%`,
                       }}
                     />
                   </div>
                   <div className="text-xs text-slate-500 mt-1">
-                    {badge.progress}/{badge.requirement.value}
+                    {badge.progress}/{getRequirementValue(badge)}
                   </div>
                 </div>
               )}
@@ -280,7 +312,9 @@ const BadgeCollection = () => {
       {filteredBadges.length === 0 && (
         <div className="text-center py-12">
           <Award className="w-16 h-16 mx-auto text-slate-400 mb-4" />
-          <h4 className="text-lg font-bold text-slate-700 mb-2">No badges found</h4>
+          <h4 className="text-lg font-bold text-slate-700 mb-2">
+            No badges found
+          </h4>
           <p className="text-slate-600">Try selecting a different filter</p>
         </div>
       )}

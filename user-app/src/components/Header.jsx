@@ -76,6 +76,42 @@ const Header = ({
   const planBadge = planBadges[actualSubscription.plan] || planBadges.free;
   const PlanIcon = planBadge.icon;
 
+  // Get button text untuk dropdown menu berdasarkan plan
+  const getDropdownButtonText = () => {
+    if (actualSubscription.plan === "free") {
+      return "Upgrade Plan";
+    } else if (actualSubscription.plan === "pro") {
+      return "Change Plan";
+    } else {
+      return "View Plan Details";
+    }
+  };
+
+  // Get button icon untuk dropdown menu
+  const getDropdownButtonIcon = () => {
+    if (actualSubscription.plan === "free") {
+      return <Zap className="w-4 h-4" />;
+    } else if (actualSubscription.plan === "pro") {
+      return (
+        <svg
+          className="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+            d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+          />
+        </svg>
+      );
+    } else {
+      return <Star className="w-4 h-4" />;
+    }
+  };
+
   // Handle click outside untuk menutup dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -107,31 +143,6 @@ const Header = ({
         navigate("/");
       }
     });
-  };
-
-  // Get button text berdasarkan plan
-  const getUpgradeButtonText = () => {
-    if (actualSubscription.plan === "free") {
-      return "Upgrade";
-    } else if (actualSubscription.plan === "pro") {
-      return "Change Plan";
-    } else {
-      return "View Plan"; // Untuk lifetime, hanya view
-    }
-  };
-
-  // Get button class berdasarkan plan
-  const getUpgradeButtonClass = () => {
-    const baseClass =
-      "hidden md:block cursor-pointer px-5 py-2 rounded-xl hover:shadow-lg transition-all duration-200 font-bold border-2";
-
-    if (actualSubscription.plan === "free") {
-      return `${baseClass} bg-linear-to-r from-violet-500 to-purple-500 text-white border-violet-400/50`;
-    } else if (actualSubscription.plan === "pro") {
-      return `${baseClass} bg-linear-to-r from-emerald-500 to-green-500 text-white border-emerald-400/50`;
-    } else {
-      return `${baseClass} bg-linear-to-r from-amber-500 to-yellow-500 text-white border-amber-400/50`;
-    }
   };
 
   // FIX: Safe check untuk targetProgress
@@ -202,16 +213,17 @@ const Header = ({
                 </div>
               </Motion.div>
 
-              {/* Upgrade/Change Plan Button */}
-              {/* Tampilkan untuk semua plan kecuali lifetime (tapi lifetime bisa view) */}
-              <Motion.button
-                whileHover={{ scale: 1.05, y: -2 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={onShowUpgradeModal}
-                className={getUpgradeButtonClass()}
-              >
-                {getUpgradeButtonText()}
-              </Motion.button>
+              {/* Upgrade/Change Plan Button - HANYA tampil untuk Free plan di header */}
+              {actualSubscription.plan === "free" && (
+                <Motion.button
+                  whileHover={{ scale: 1.05, y: -2 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={onShowUpgradeModal}
+                  className="hidden md:block cursor-pointer px-5 py-2 rounded-xl hover:shadow-lg transition-all duration-200 font-bold border-2 bg-linear-to-r from-violet-500 to-purple-500 text-white border-violet-400/50"
+                >
+                  Upgrade
+                </Motion.button>
+              )}
 
               {/* User Profile Dropdown */}
               <div className="relative user-menu-container" ref={dropdownRef}>
@@ -243,7 +255,7 @@ const Header = ({
                       initial={{ opacity: 0, scale: 0.95, y: -10 }}
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                      className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-violet-200 overflow-hidden z-50"
+                      className="absolute right-0 mt-3 w-72 bg-white rounded-2xl shadow-xl border border-violet-200 overflow-hidden z-50"
                     >
                       {/* User Info Header */}
                       <div className="p-4 border-b border-violet-200 bg-linear-to-r from-violet-50 to-purple-50">
@@ -363,7 +375,7 @@ const Header = ({
                           )}
                         </div>
 
-                        {/* Upgrade/Change Plan Button in Menu */}
+                        {/* Upgrade/Change/View Plan Button in Menu - TAMPIL untuk SEMUA plan */}
                         <Motion.button
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
@@ -373,34 +385,8 @@ const Header = ({
                             setShowUserMenu(false);
                           }}
                         >
-                          {actualSubscription.plan === "free" ? (
-                            <>
-                              <Zap className="w-4 h-4" />
-                              <span>Upgrade Plan</span>
-                            </>
-                          ) : actualSubscription.plan === "pro" ? (
-                            <>
-                              <svg
-                                className="w-4 h-4"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth="2"
-                                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-                                />
-                              </svg>
-                              <span>Change Plan</span>
-                            </>
-                          ) : (
-                            <>
-                              <Star className="w-4 h-4" />
-                              <span>View Plan Details</span>
-                            </>
-                          )}
+                          {getDropdownButtonIcon()}
+                          <span>{getDropdownButtonText()}</span>
                         </Motion.button>
 
                         {/* Update Balance Button */}
