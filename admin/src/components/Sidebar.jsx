@@ -37,6 +37,11 @@ const Sidebar = () => {
         icon: LayoutDashboard,
       },
       {
+        name: "User",
+        link: "/users",
+        icon: User,
+      },
+      {
         name: "Manual Rate",
         link: "/manual-rate",
         icon: DollarSign,

@@ -144,7 +144,7 @@ export const getManualRates = async (req, res) => {
       page = 1,
       limit = 20,
       search = "",
-      isActive = true,
+      isActive, // HAPUS default value
       sortBy = "effectiveFrom",
       sortOrder = "DESC",
     } = req.query;
@@ -158,9 +158,15 @@ export const getManualRates = async (req, res) => {
       toCurrency: "USD",
     };
 
-    if (isActive !== undefined) {
-      whereClause.isActive = isActive === "true";
+    // FIX: Hanya tambahkan filter isActive jika ada dan valid
+    if (isActive !== undefined && isActive !== "") {
+      // Handle string "true"/"false" atau boolean
+      const isActiveBool = 
+        isActive === "true" || isActive === true || isActive === "1";
+      whereClause.isActive = isActiveBool;
     }
+    // Jika isActive kosong atau undefined, JANGAN tambahkan filter
+    // Ini akan menampilkan SEMUA status (active dan inactive)
 
     if (search) {
       whereClause[Op.or] = [{ notes: { [Op.like]: `%${search}%` } }];
@@ -516,92 +522,66 @@ export const createManualRate = async (req, res) => {
   }
 };
 
-// PUT: Update manual rate - DIPERBAIKI DENGAN RETRY MECHANISM
+// PUT: Update manual rate - FIXED untuk edit tanggal sama
 export const updateManualRate = async (req, res) => {
   let transaction;
-  const maxRetries = 3;
-  let retryCount = 0;
-
-  while (retryCount < maxRetries) {
+  
+  try {
     transaction = await db.transaction();
-    
-    try {
-      const { id } = req.params;
-      const userId = req.userId;
-      const {
-        rate,
-        effectiveFrom,
-        isActive,
-        notes,
-        updateLeaderboard = false,
-      } = req.body;
+    const { id } = req.params;
+    const userId = req.userId;
+    const {
+      rate,
+      effectiveFrom,
+      isActive,
+      notes,
+      updateLeaderboard = false,
+    } = req.body;
 
-      console.log(`🔄 [Controller] Update rate ID ${id} (attempt ${retryCount + 1}):`, req.body);
+    console.log(`🔄 [Controller] Updating rate ID ${id}:`, { rate, effectiveFrom });
 
-      // Find existing rate
-      const existingRate = await ExchangeRate.findOne({
-        where: {
-          id,
-          source: "manual",
-        },
-        transaction,
+    // Find existing rate
+    const existingRate = await ExchangeRate.findOne({
+      where: {
+        id,
+        source: "manual",
+      },
+      transaction,
+    });
+
+    if (!existingRate) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "Manual rate not found",
       });
+    }
 
-      if (!existingRate) {
+    // ==== LOGIKA UTAMA: EDIT TANGGAL SAMA ====
+    
+    // Jika rate berubah
+    if (rate !== undefined) {
+      // Validate rate
+      const rateError = validateRateValue(rate);
+      if (rateError) {
         await transaction.rollback();
-        return res.status(404).json({
+        return res.status(400).json({
           success: false,
-          message: "Manual rate not found",
+          message: rateError,
         });
       }
 
-      // ===== JIKA UPDATE RATE VALUE =====
-      if (rate !== undefined) {
-        // Validate rate
-        const rateError = validateRateValue(rate);
-        if (rateError) {
-          await transaction.rollback();
-          return res.status(400).json({
-            success: false,
-            message: rateError,
-          });
-        }
-
-        const rateValue = parseFloat(rate);
-        let proposedDate = effectiveFrom ? new Date(effectiveFrom) : new Date();
+      const rateValue = parseFloat(rate);
+      const existingRateValue = parseFloat(existingRate.rate);
+      const difference = Math.abs((rateValue - existingRateValue) / existingRateValue);
+      
+      // Jika TIDAK mengubah effectiveFrom, langsung UPDATE record yang ada
+      if (!effectiveFrom || effectiveFrom === existingRate.effectiveFrom.toISOString().split('T')[0]) {
         
-        // Untuk retry, tambahkan sedikit waktu
-        if (retryCount > 0) {
-          proposedDate = new Date(proposedDate.getTime() + retryCount * 100); // tambah 100ms per retry
-        }
-        
-        // DAPATKAN EFFECTIVEFROM YANG UNIK
-        const uniqueEffectiveFrom = await getUniqueEffectiveFrom(
-          existingRate.fromCurrency,
-          existingRate.toCurrency,
-          proposedDate,
-          transaction,
-          existingRate.id
-        );
-
-        // Pastikan tidak lebih dari 12 digit desimal
-        const rateStr = rate.toString();
-        const decimalPlaces = rateStr.includes(".")
-          ? rateStr.split(".")[1].length
-          : 0;
-        if (decimalPlaces > 12) {
-          await transaction.rollback();
-          return res.status(400).json({
-            success: false,
-            message: `Rate cannot have more than 12 decimal places (you entered ${decimalPlaces})`,
-          });
-        }
-
-        const existingRateValue = parseFloat(existingRate.rate);
-        const difference = Math.abs((rateValue - existingRateValue) / existingRateValue);
-        
-        // Minor update (perubahan < 0.1%)
-        if (difference < 0.001) {
+        // Minor update (< 1%): Update langsung
+        if (difference < 0.01) {
+          console.log(`🔄 Minor update on existing date: ${existingRate.effectiveFrom}`);
+          
           await existingRate.update(
             {
               rate: rateValue,
@@ -620,251 +600,230 @@ export const updateManualRate = async (req, res) => {
             existingRate.toCurrency
           );
 
-          // Get updated rate with details
-          const updatedRate = await ExchangeRate.findByPk(id, {
-            include: [
-              {
-                model: User,
-                as: "updater",
-                attributes: ["id", "name", "email"],
-                required: false,
-              },
-            ],
-          });
+          // Update leaderboard jika perlu
+          let leaderboardUpdate = null;
+          if (updateLeaderboard && existingRate.toCurrency === "USD") {
+            leaderboardUpdate = await updateLeaderboardWithNewRate(
+              existingRate.fromCurrency,
+              existingRate.toCurrency,
+              rateValue
+            );
+          }
 
           return res.json({
             success: true,
-            message: "Rate updated (minor change)",
+            message: "Rate updated successfully",
             data: {
-              id: updatedRate.id,
-              fromCurrency: updatedRate.fromCurrency,
-              toCurrency: updatedRate.toCurrency,
-              rate: parseFloat(updatedRate.rate),
-              effectiveFrom: updatedRate.effectiveFrom,
-              effectiveTo: updatedRate.effectiveTo,
-              isActive: updatedRate.isActive,
-              source: updatedRate.source,
-              notes: updatedRate.notes,
+              id: existingRate.id,
+              fromCurrency: existingRate.fromCurrency,
+              toCurrency: existingRate.toCurrency,
+              rate: rateValue,
+              effectiveFrom: existingRate.effectiveFrom,
+              effectiveTo: existingRate.effectiveTo,
+              isActive: existingRate.isActive,
+              source: existingRate.source,
+              notes: notes || existingRate.notes,
               updatedBy: userId,
-              updater: updatedRate.updater,
-              lastUpdated: updatedRate.lastUpdated,
-              createdAt: updatedRate.createdAt,
-              updatedAt: updatedRate.updatedAt,
-              display: `1 ${updatedRate.fromCurrency} = ${parseFloat(
-                updatedRate.rate
-              ).toFixed(8)} ${updatedRate.toCurrency}`,
+              lastUpdated: new Date(),
             },
             minorUpdate: true,
             changePercentage: (difference * 100).toFixed(4),
           });
+        } 
+        // Major update (≥ 1%): Nonaktifkan yang lama, buat yang baru di tanggal BESOK
+        else {
+          console.log(`⚠️ Major update detected: ${(difference * 100).toFixed(2)}% change`);
+          
+          // 1. Deactivate old rate (berlaku sampai hari ini)
+          await existingRate.update(
+            {
+              isActive: false,
+              effectiveTo: new Date(), // Berlaku sampai hari ini
+              lastUpdated: new Date(),
+            },
+            { transaction }
+          );
+
+          // 2. Create new rate mulai BESOK
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          tomorrow.setHours(0, 0, 0, 0);
+
+          const newRate = await ExchangeRate.create(
+            {
+              fromCurrency: existingRate.fromCurrency,
+              toCurrency: existingRate.toCurrency,
+              rate: rateValue,
+              effectiveFrom: tomorrow, // Mulai besok
+              effectiveTo: null,
+              isActive: true,
+              source: "manual",
+              notes: notes || `${existingRate.notes} - Updated from ${existingRateValue} to ${rateValue}`,
+              updatedBy: userId,
+              metadata: {
+                ...existingRate.metadata,
+                previousRateId: existingRate.id,
+                changePercentage: (difference * 100).toFixed(2),
+              },
+            },
+            { transaction }
+          );
+
+          await transaction.commit();
+
+          // Clear cache
+          currencyService.clearManualRateCache(
+            existingRate.fromCurrency,
+            existingRate.toCurrency
+          );
+
+          // Update leaderboard
+          let leaderboardUpdate = null;
+          if (updateLeaderboard && existingRate.toCurrency === "USD") {
+            leaderboardUpdate = await updateLeaderboardWithNewRate(
+              existingRate.fromCurrency,
+              existingRate.toCurrency,
+              rateValue
+            );
+          }
+
+          return res.json({
+            success: true,
+            message: "Rate updated (new rate effective tomorrow)",
+            data: {
+              oldRateId: existingRate.id,
+              newRateId: newRate.id,
+              oldRate: existingRateValue,
+              newRate: rateValue,
+              changePercentage: (difference * 100).toFixed(2),
+              effectiveFrom: newRate.effectiveFrom,
+              note: "Rate lama tetap berlaku sampai hari ini. Rate baru berlaku mulai besok."
+            },
+            leaderboardUpdate,
+          });
         }
-
-        // Major update (perubahan ≥ 0.1%)
-        // 1. Deactivate old rate
-        await existingRate.update(
-          {
-            isActive: false,
-            effectiveTo: uniqueEffectiveFrom,
-            lastUpdated: new Date(),
-          },
-          { transaction }
-        );
-
-        // 2. Create new rate dengan effectiveFrom yang unik
-        const newRate = await ExchangeRate.create(
-          {
+      }
+      // Jika mengubah effectiveFrom, maka cek duplikat
+      else {
+        const newEffectiveFrom = new Date(effectiveFrom);
+        
+        // Cek apakah sudah ada rate di tanggal tersebut
+        const existingSameDate = await ExchangeRate.findOne({
+          where: {
             fromCurrency: existingRate.fromCurrency,
             toCurrency: existingRate.toCurrency,
-            rate: rateValue,
-            effectiveFrom: uniqueEffectiveFrom,
-            effectiveTo: null,
-            isActive: true,
-            source: "manual",
-            notes: notes || existingRate.notes,
-            updatedBy: userId,
-            metadata: {
-              ...existingRate.metadata,
-              previousRateId: existingRate.id,
-              updatedBy: userId,
-              updatedAt: new Date(),
-            },
+            effectiveFrom: newEffectiveFrom,
+            id: { [Op.ne]: existingRate.id } // Exclude current rate
           },
-          { transaction }
-        );
-
-        // 3. Get the new rate with updater info
-        const updatedRateWithDetails = await ExchangeRate.findByPk(newRate.id, {
-          include: [
-            {
-              model: User,
-              as: "updater",
-              attributes: ["id", "name", "email"],
-              required: false,
-            },
-          ],
           transaction,
         });
 
+        // Jika sudah ada rate di tanggal tersebut, TOLAK
+        if (existingSameDate) {
+          await transaction.rollback();
+          return res.status(409).json({
+            success: false,
+            message: `Rate untuk tanggal ${effectiveFrom} sudah ada`,
+            existingRate: {
+              id: existingSameDate.id,
+              rate: existingSameDate.rate,
+              effectiveFrom: existingSameDate.effectiveFrom,
+            },
+            suggestion: "Gunakan tanggal lain atau update rate yang sudah ada"
+          });
+        }
+
+        // Jika belum ada, UPDATE dengan tanggal baru
+        await existingRate.update(
+          {
+            rate: rateValue,
+            effectiveFrom: newEffectiveFrom,
+            notes: notes || existingRate.notes,
+            lastUpdated: new Date(),
+            updatedBy: userId,
+          },
+          { transaction }
+        );
+
         await transaction.commit();
 
-        // 4. Clear cache
+        // Clear cache
         currencyService.clearManualRateCache(
           existingRate.fromCurrency,
           existingRate.toCurrency
         );
 
-        // 5. Update leaderboard in background if requested
-        let leaderboardUpdate = null;
-        if (updateLeaderboard && existingRate.toCurrency === "USD") {
-          leaderboardUpdate = await updateLeaderboardWithNewRate(
-            existingRate.fromCurrency,
-            existingRate.toCurrency,
-            rateValue
-          );
-        }
-
         return res.json({
           success: true,
-          message: "Rate updated (new version created)",
+          message: "Rate updated with new effective date",
           data: {
-            oldRateId: existingRate.id,
-            newRateId: newRate.id,
-            updatedRate: {
-              id: newRate.id,
-              fromCurrency: newRate.fromCurrency,
-              toCurrency: newRate.toCurrency,
-              rate: parseFloat(newRate.rate),
-              effectiveFrom: newRate.effectiveFrom,
-              effectiveTo: newRate.effectiveTo,
-              isActive: newRate.isActive,
-              source: newRate.source,
-              notes: newRate.notes,
-              updatedBy: userId,
-              updater: updatedRateWithDetails.updater,
-              lastUpdated: newRate.lastUpdated,
-              createdAt: newRate.createdAt,
-              updatedAt: newRate.updatedAt,
-              display: `1 ${newRate.fromCurrency} = ${parseFloat(
-                newRate.rate
-              ).toFixed(8)} ${newRate.toCurrency}`,
-            },
-            changePercentage: (difference * 100).toFixed(4),
-          },
-          leaderboardUpdate,
-        });
-      } 
-      
-      // ===== JIKA HANYA UPDATE METADATA =====
-      else {
-        const updateData = {};
-        
-        if (isActive !== undefined) updateData.isActive = isActive;
-        if (notes !== undefined) updateData.notes = notes;
-        
-        if (effectiveFrom !== undefined) {
-          const newDate = new Date(effectiveFrom);
-          const oldDate = new Date(existingRate.effectiveFrom);
-          
-          // Cek apakah tanggal berubah
-          if (newDate.getTime() !== oldDate.getTime()) {
-            // Untuk retry, tambahkan sedikit waktu
-            if (retryCount > 0) {
-              newDate.setMilliseconds(newDate.getMilliseconds() + retryCount * 100);
-            }
-            
-            // Dapatkan tanggal yang unik
-            const uniqueDate = await getUniqueEffectiveFrom(
-              existingRate.fromCurrency,
-              existingRate.toCurrency,
-              newDate,
-              transaction,
-              existingRate.id
-            );
-            
-            updateData.effectiveFrom = uniqueDate;
-          }
-        }
-
-        updateData.updatedBy = userId;
-        updateData.lastUpdated = new Date();
-
-        // Update rate
-        await existingRate.update(updateData, { transaction });
-        
-        // Get updated rate
-        const updatedRate = await ExchangeRate.findByPk(id, {
-          include: [
-            {
-              model: User,
-              as: "updater",
-              attributes: ["id", "name", "email"],
-              required: false,
-            },
-          ],
-          transaction,
-        });
-
-        await transaction.commit();
-
-        // Clear cache jika status aktif berubah
-        if (isActive !== undefined) {
-          currencyService.clearManualRateCache(
-            existingRate.fromCurrency,
-            existingRate.toCurrency
-          );
-        }
-
-        return res.json({
-          success: true,
-          message: "Rate metadata updated successfully",
-          data: {
-            id: updatedRate.id,
-            fromCurrency: updatedRate.fromCurrency,
-            toCurrency: updatedRate.toCurrency,
-            rate: parseFloat(updatedRate.rate),
-            effectiveFrom: updatedRate.effectiveFrom,
-            effectiveTo: updatedRate.effectiveTo,
-            isActive: updatedRate.isActive,
-            source: updatedRate.source,
-            notes: updatedRate.notes,
-            updatedBy: updatedRate.updatedBy,
-            updater: updatedRate.updater,
-            lastUpdated: updatedRate.lastUpdated,
-            createdAt: updatedRate.createdAt,
-            updatedAt: updatedRate.updatedAt,
-            display: `1 ${updatedRate.fromCurrency} = ${parseFloat(
-              updatedRate.rate
-            ).toFixed(8)} ${updatedRate.toCurrency}`,
+            id: existingRate.id,
+            rate: rateValue,
+            effectiveFrom: newEffectiveFrom,
+            previousEffectiveFrom: existingRate.effectiveFrom,
           },
         });
       }
-    } catch (error) {
-      await transaction.rollback();
-      
-      // Jika error duplicate, coba retry
-      if (error.name === 'SequelizeUniqueConstraintError' && retryCount < maxRetries - 1) {
-        retryCount++;
-        console.log(`🔄 Retry ${retryCount} for rate ${id} due to duplicate`);
-        continue;
-      }
-      
-      // Tangani error duplicate khusus
-      if (error.name === 'SequelizeUniqueConstraintError') {
-        return res.status(409).json({
-          success: false,
-          message: "Duplicate rate entry detected. Please use a different effective date.",
-          field: "effectiveFrom",
-          suggestion: "Try using a slightly different date/time"
-        });
-      }
-      
-      handleError(res, error, "Failed to update manual rate");
-      return;
     }
+    // Jika hanya update metadata (isActive, notes)
+    else {
+      const updateData = {
+        lastUpdated: new Date(),
+        updatedBy: userId,
+      };
+      
+      if (isActive !== undefined) updateData.isActive = isActive;
+      if (notes !== undefined) updateData.notes = notes;
+      
+      // Jika mengubah effectiveFrom untuk metadata saja
+      if (effectiveFrom !== undefined) {
+        const newEffectiveFrom = new Date(effectiveFrom);
+        const oldEffectiveFrom = new Date(existingRate.effectiveFrom);
+        
+        if (newEffectiveFrom.getTime() !== oldEffectiveFrom.getTime()) {
+          // Cek duplikat
+          const existingSameDate = await ExchangeRate.findOne({
+            where: {
+              fromCurrency: existingRate.fromCurrency,
+              toCurrency: existingRate.toCurrency,
+              effectiveFrom: newEffectiveFrom,
+              id: { [Op.ne]: existingRate.id }
+            },
+            transaction,
+          });
+
+          if (existingSameDate) {
+            await transaction.rollback();
+            return res.status(409).json({
+              success: false,
+              message: `Rate untuk tanggal ${effectiveFrom} sudah ada`,
+            });
+          }
+          
+          updateData.effectiveFrom = newEffectiveFrom;
+        }
+      }
+
+      await existingRate.update(updateData, { transaction });
+      await transaction.commit();
+
+      return res.json({
+        success: true,
+        message: "Rate metadata updated",
+        data: {
+          id: existingRate.id,
+          ...updateData,
+        },
+      });
+    }
+
+  } catch (error) {
+    if (transaction) await transaction.rollback();
+    handleError(res, error, "Failed to update manual rate");
   }
 };
 
-// DELETE: Deactivate manual rate
+// DELETE: Deactivate manual rate - TAMBAHKAN LOGGING
 export const deactivateManualRate = async (req, res) => {
   const transaction = await db.transaction();
 
@@ -872,7 +831,7 @@ export const deactivateManualRate = async (req, res) => {
     const { id } = req.params;
     const userId = req.userId;
 
-    console.log(`🗑️ [Controller] Deactivating rate ID: ${id}`);
+    console.log(`🗑️ [Controller] Deactivating rate ID: ${id}, User ID: ${userId}`);
 
     const rate = await ExchangeRate.findOne({
       where: {
@@ -883,6 +842,7 @@ export const deactivateManualRate = async (req, res) => {
     });
 
     if (!rate) {
+      console.log(`❌ [Controller] Rate ${id} not found`);
       await transaction.rollback();
       return res.status(404).json({
         success: false,
@@ -890,8 +850,15 @@ export const deactivateManualRate = async (req, res) => {
       });
     }
 
+    console.log(`📊 [Controller] Rate found:`, {
+      id: rate.id,
+      currencyPair: `${rate.fromCurrency}_${rate.toCurrency}`,
+      rate: rate.rate,
+      isActive: rate.isActive,
+    });
+
     // Deactivate the rate
-    await rate.update(
+    const updateResult = await rate.update(
       {
         isActive: false,
         effectiveTo: new Date(),
@@ -912,6 +879,11 @@ export const deactivateManualRate = async (req, res) => {
     currencyService.clearManualRateCache(rate.fromCurrency, rate.toCurrency);
 
     console.log(`✅ [Controller] Rate ${id} deactivated successfully`);
+    console.log(`📋 [Controller] Update result:`, {
+      rowsAffected: updateResult,
+      newIsActive: rate.isActive,
+      effectiveTo: rate.effectiveTo,
+    });
 
     res.json({
       success: true,
@@ -926,8 +898,61 @@ export const deactivateManualRate = async (req, res) => {
     });
   } catch (error) {
     console.error(`❌ [Controller] Error deactivating rate:`, error);
+    console.error(`❌ [Controller] Error stack:`, error.stack);
     await transaction.rollback();
     handleError(res, error, "Failed to deactivate manual rate");
+  }
+};
+
+// Di backend controller (tambahkan fungsi baru):
+export const deleteManualRatePermanently = async (req, res) => {
+  const transaction = await db.transaction();
+
+  try {
+    const { id } = req.params;
+
+    console.log(`🔥 [Controller] HARD DELETE rate ID: ${id}`);
+
+    const rate = await ExchangeRate.findOne({
+      where: {
+        id,
+        source: "manual",
+      },
+      transaction,
+    });
+
+    if (!rate) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "Manual rate not found",
+      });
+    }
+
+    // Hard delete
+    await rate.destroy({ transaction });
+
+    await transaction.commit();
+
+    // Clear cache
+    currencyService.clearManualRateCache(rate.fromCurrency, rate.toCurrency);
+
+    console.log(`✅ [Controller] Rate ${id} permanently deleted`);
+
+    res.json({
+      success: true,
+      message: "Rate permanently deleted",
+      data: {
+        id: rate.id,
+        fromCurrency: rate.fromCurrency,
+        toCurrency: rate.toCurrency,
+        deletedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    console.error(`❌ [Controller] Error deleting rate:`, error);
+    await transaction.rollback();
+    handleError(res, error, "Failed to delete manual rate");
   }
 };
 

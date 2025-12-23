@@ -9,7 +9,8 @@ import {
   deactivateManualRate,
   bulkUpsertRates,
   getRateStatistics,
-  validateConversion
+  validateConversion,
+  deleteManualRatePermanently
 } from '../controllers/manualRateController.js';
 
 const router = express.Router();
@@ -29,6 +30,7 @@ router.get('/:id', verifyUser, adminOnly, getManualRateById);
 router.post('/', verifyUser, adminOnly, createManualRate);
 router.put('/:id', verifyUser, adminOnly, updateManualRate);
 router.delete('/:id', verifyUser, adminOnly, deactivateManualRate);
+router.delete('/permanent/:id', verifyUser, adminOnly, deleteManualRatePermanently);
 router.post('/bulk', verifyUser, adminOnly, bulkUpsertRates);
 
 export default router;

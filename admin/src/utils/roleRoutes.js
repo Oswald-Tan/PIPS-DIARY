@@ -1,4 +1,5 @@
 export const roleRoutes = {
+  super_admin: "/dashboard",
   admin: "/dashboard",
 };
 

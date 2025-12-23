@@ -11,7 +11,7 @@ import Header from "../components/Header";
 
 const currentYear = new Date().getFullYear();
 
-const Layout = () => {
+const LayoutSuperAdmin = () => {
   // State declarations
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -28,6 +28,7 @@ const Layout = () => {
   // Get active tab from route
   const activeTab = useMemo(() => {
     if (location.pathname.includes("/users")) return "users";
+    if (location.pathname.includes("/manual-rate")) return "manual-rate";
     return "dashboard";
   }, [location.pathname]);
 
@@ -116,4 +117,4 @@ const Layout = () => {
   );
 };
 
-export default Layout;
+export default LayoutSuperAdmin;

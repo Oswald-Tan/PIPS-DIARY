@@ -44,7 +44,6 @@ const ExchangeRate = db.define(
           if (isNaN(rateValue) || rateValue <= 0) {
             throw new Error("Rate must be a positive number");
           }
-          // Terima nilai dengan 1-12 digit desimal
           const decimalPlaces = value.toString().split(".")[1]?.length || 0;
           if (decimalPlaces > 12) {
             throw new Error("Rate cannot have more than 12 decimal places");
@@ -52,7 +51,6 @@ const ExchangeRate = db.define(
         },
       },
       set(value) {
-        // Simpan dengan presisi 12 digit
         const numValue = parseFloat(value);
         if (!isNaN(numValue)) {
           this.setDataValue("rate", numValue);
@@ -124,23 +122,7 @@ const ExchangeRate = db.define(
       },
     ],
     hooks: {
-      beforeCreate: async (rate, options) => {
-        rate.lastUpdated = new Date();
-        
-        // Validasi tambahan untuk mencegah duplicate
-        const existing = await ExchangeRate.findOne({
-          where: {
-            fromCurrency: rate.fromCurrency,
-            toCurrency: rate.toCurrency,
-            effectiveFrom: rate.effectiveFrom,
-          },
-          transaction: options.transaction,
-        });
-        
-        if (existing) {
-          throw new Error(`Duplicate rate entry for ${rate.fromCurrency}-${rate.toCurrency} at ${rate.effectiveFrom}`);
-        }
-      },
+      // HAPUS beforeCreate hook karena sudah ditangani di controller
       beforeUpdate: (rate) => {
         rate.lastUpdated = new Date();
       },
@@ -148,7 +130,7 @@ const ExchangeRate = db.define(
   }
 );
 
-// Static methods for ExchangeRate model
+// Static methods
 ExchangeRate.getActiveRate = async function (fromCurrency, toCurrency = "USD") {
   return await this.findOne({
     where: {
@@ -205,6 +187,46 @@ ExchangeRate.bulkCreateRates = async function (ratesArray, transaction = null) {
     validate: true,
     individualHooks: true,
   });
+};
+
+// Helper function untuk mendapatkan effectiveFrom yang unik
+ExchangeRate.getUniqueEffectiveFrom = async function (
+  fromCurrency,
+  toCurrency,
+  proposedDate,
+  transaction,
+  excludeId = null
+) {
+  let currentDate = new Date(proposedDate);
+  let attempts = 0;
+  const maxAttempts = 100;
+
+  while (attempts < maxAttempts) {
+    const whereClause = {
+      fromCurrency: fromCurrency.toUpperCase(),
+      toCurrency: toCurrency.toUpperCase(),
+      effectiveFrom: currentDate,
+    };
+
+    if (excludeId) {
+      whereClause.id = { [Op.ne]: excludeId };
+    }
+
+    const existing = await this.findOne({
+      where: whereClause,
+      transaction,
+    });
+
+    if (!existing) {
+      return currentDate;
+    }
+
+    // Tambah 1 milidetik
+    currentDate = new Date(currentDate.getTime() + 1);
+    attempts++;
+  }
+
+  throw new Error(`Cannot find unique effectiveFrom after ${maxAttempts} attempts`);
 };
 
 // Relationships

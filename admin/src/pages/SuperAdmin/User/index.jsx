@@ -2,10 +2,10 @@ import Layout from "./Layout";
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, Outlet } from "react-router-dom";
-import { getMe } from "../../features/authSlice";
-import { getDashboardPathByRole } from "../../utils/roleRoutes";
+import { getMe } from "../../../features/authSlice";
+import { getDashboardPathByRole } from "../../../utils/roleRoutes";
 
-const Dashboard = () => {
+const User = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { isError, user } = useSelector((state) => state.auth);
@@ -18,7 +18,7 @@ const Dashboard = () => {
     if (isError) {
       navigate("/");
     }
-    if (user && user.role !== "admin") {
+    if (user && user.role !== "super_admin") {
       navigate(getDashboardPathByRole(user.role));
     }
   }, [isError, user, navigate]);
@@ -30,4 +30,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default User;

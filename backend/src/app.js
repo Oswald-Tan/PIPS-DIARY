@@ -29,6 +29,7 @@ import Gamification from "./routes/gamificationRoute.js";
 import CalenderEvent from "./routes/calendarRoutes.js";
 import Transaction from "./routes/transactionRoutes.js";
 import ManualRate from "./routes/manualRateRoute.js";
+import User from "./routes/usersRoute.js";
 
 // Import controllers
 import {
@@ -50,25 +51,29 @@ const initializeDatabase = async () => {
 
     if (process.env.NODE_ENV === "development") {
       console.log("🛠️  Running in DEVELOPMENT mode");
-      
+
       // Inisialisasi default badges
-      const { initializeDefaultBadges } = await import('./models/gamification.js');
+      const { initializeDefaultBadges } = await import(
+        "./models/gamification.js"
+      );
       await initializeDefaultBadges();
       console.log("✅ Default badges initialized");
-      
     } else {
       console.log("🚀 Running in PRODUCTION mode");
-      
+
       // Cek exchange rates
       try {
-        const { ExchangeRate } = await import('./models/gamification.js');
+        const { ExchangeRate } = await import("./models/gamification.js");
         const count = await ExchangeRate.count();
         console.log(`📊 Found ${count} exchange rates in database`);
       } catch (error) {
-        console.warn("⚠️  Could not check exchange rates table:", error.message);
+        console.warn(
+          "⚠️  Could not check exchange rates table:",
+          error.message
+        );
       }
     }
-    
+
     return true;
   } catch (error) {
     console.error("❌ Database error:", error.message);
@@ -83,13 +88,15 @@ const initializeDatabase = async () => {
 const onServerStart = async () => {
   try {
     await initializeDatabase();
-    
+
     // Pre-fetch essential rates jika diperlukan
-    if (process.env.PREFETCH_EXCHANGE_RATES === 'true') {
+    if (process.env.PREFETCH_EXCHANGE_RATES === "true") {
       console.log("🔄 Pre-fetching essential exchange rates...");
-      const currencyService = await import('./services/currencyService.js').then(m => m.default);
-      const essentialCurrencies = ['IDR', 'EUR', 'GBP'];
-      
+      const currencyService = await import(
+        "./services/currencyService.js"
+      ).then((m) => m.default);
+      const essentialCurrencies = ["IDR", "EUR", "GBP"];
+
       for (const currency of essentialCurrencies) {
         try {
           await currencyService.getRateToUSD(currency);
@@ -99,7 +106,7 @@ const onServerStart = async () => {
         }
       }
     }
-    
+
     console.log("🚀 Server startup completed successfully");
   } catch (error) {
     console.error("❌ Server startup failed:", error);
@@ -109,15 +116,17 @@ const onServerStart = async () => {
 // ==================== EXCHANGE RATE CRON JOB ====================
 const setupExchangeRateCronJob = () => {
   console.log("⏰ Setting up exchange rate cron job (hourly)...");
-  
-  cron.schedule('0 * * * *', async () => {
-    console.log('🔄 Running scheduled exchange rate update...');
-    
+
+  cron.schedule("0 * * * *", async () => {
+    console.log("🔄 Running scheduled exchange rate update...");
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      const currencyService = await import('./services/currencyService.js').then(m => m.default);
-      const currencies = ['IDR', 'EUR', 'GBP', 'JPY', 'SGD', 'AUD'];
-      
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      const currencyService = await import(
+        "./services/currencyService.js"
+      ).then((m) => m.default);
+      const currencies = ["IDR"];
+
       let successCount = 0;
       for (const currency of currencies) {
         try {
@@ -128,10 +137,59 @@ const setupExchangeRateCronJob = () => {
           console.error(`❌ Failed to update ${currency}:`, error.message);
         }
       }
-      
-      console.log(`📊 Exchange rate update: ${successCount}/${currencies.length} successful`);
+
+      console.log(
+        `📊 Exchange rate update: ${successCount}/${currencies.length} successful`
+      );
     } catch (error) {
-      console.error('❌ Exchange rate cron job failed:', error);
+      console.error("❌ Exchange rate cron job failed:", error);
+    }
+  });
+};
+
+const setupManualRateValidationCron = () => {
+  console.log(
+    "⏰ Setting up manual rate validation cron job (daily at 08:00)..."
+  );
+
+  cron.schedule("0 8 * * *", async () => {
+    console.log("🔍 Running manual rate validation check...");
+
+    try {
+      const { ExchangeRate } = await import("./models/exchangeRate.js");
+
+      // Cek apakah ada active manual rate untuk IDR→USD
+      const activeRate = await ExchangeRate.findOne({
+        where: {
+          fromCurrency: "IDR",
+          toCurrency: "USD",
+          isActive: true,
+          source: "manual",
+        },
+      });
+
+      if (!activeRate) {
+        console.warn("⚠️  WARNING: No active manual rate found for IDR→USD!");
+        // Bisa tambahkan notifikasi ke admin di sini
+      } else {
+        console.log(
+          `✅ Active manual rate found: 1 IDR = ${activeRate.rate} USD`
+        );
+
+        // Cek apakah rate terlalu tua (lebih dari 30 hari)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        if (activeRate.effectiveFrom < thirtyDaysAgo) {
+          console.warn(
+            `⚠️  WARNING: Active rate is ${Math.floor(
+              (new Date() - activeRate.effectiveFrom) / (1000 * 60 * 60 * 24)
+            )} days old`
+          );
+        }
+      }
+    } catch (error) {
+      console.error("❌ Manual rate validation error:", error);
     }
   });
 };
@@ -187,7 +245,10 @@ app.use(
       if (!origin) return callback(null, true);
       if (!allowedOrigins.includes(origin)) {
         console.warn(`🚫 CORS blocked: ${origin}`);
-        return callback(new Error(`CORS policy: Origin ${origin} not allowed`), false);
+        return callback(
+          new Error(`CORS policy: Origin ${origin} not allowed`),
+          false
+        );
       }
       return callback(null, true);
     },
@@ -200,15 +261,19 @@ app.use(
 // Logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
-  res.on('finish', () => {
+  res.on("finish", () => {
     const duration = Date.now() - start;
-    console.log(`${new Date().toISOString()} ${req.method} ${req.url} ${res.statusCode} ${duration}ms`);
+    console.log(
+      `${new Date().toISOString()} ${req.method} ${req.url} ${
+        res.statusCode
+      } ${duration}ms`
+    );
   });
   next();
 });
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // Static files
 app.use(
@@ -247,7 +312,9 @@ app.get("/health", async (req, res) => {
 });
 
 app.get("/api/v1/hello-world", (req, res) => {
-  res.status(200).json({ message: "Hello, World!", timestamp: new Date().toISOString() });
+  res
+    .status(200)
+    .json({ message: "Hello, World!", timestamp: new Date().toISOString() });
 });
 
 // API Routes
@@ -259,26 +326,38 @@ app.use("/api/v1/subscription", Subscription);
 app.use("/api/v1/gamification", Gamification);
 app.use("/api/v1/calendar", CalenderEvent);
 app.use("/api/v1/transactions", Transaction);
-app.use('/api/v1/manual-rates', ManualRate);
+app.use("/api/v1/manual-rates", ManualRate);
+app.use("/api/v1/user", User);
 
 // ==================== CRON JOBS ====================
 const setupCronJobs = () => {
   console.log("⏰ Setting up cron jobs...");
-  
-  setupExchangeRateCronJob();
+
+  if (process.env.DISABLE_API_RATES !== "true") {
+    setupExchangeRateCronJob();
+  } else {
+    console.log("⏰ API exchange rate cron job disabled (using manual rates)");
+  }
+
+  // Validasi manual rates
+  setupManualRateValidationCron();
 
   // Leaderboard Cache Update (setiap 30 menit)
   cron.schedule("*/30 * * * *", async () => {
     console.log("🔄 Running leaderboard cache update...");
     try {
-      const { updateLeaderboardCachedRates } = await import('./controllers/gamificationController.js');
+      const { updateLeaderboardCachedRates } = await import(
+        "./controllers/gamificationController.js"
+      );
       const result = await updateLeaderboardCachedRates();
-      console.log(`✅ Leaderboard cache updated: ${result.updatedCount || 0} entries`);
+      console.log(
+        `✅ Leaderboard cache updated: ${result.updatedCount || 0} entries`
+      );
     } catch (error) {
       console.error("❌ Error in leaderboard cache cron job:", error);
     }
   });
-  
+
   // Subscription expiration reminders (09:00 daily)
   cron.schedule("0 9 * * *", async () => {
     console.log("⏰ Running subscription expiration reminder check...");
@@ -289,7 +368,7 @@ const setupCronJobs = () => {
       console.error("❌ Error in subscription reminder cron job:", error);
     }
   });
-  
+
   // Expired subscription downgrade (00:01 daily)
   cron.schedule("1 0 * * *", async () => {
     console.log("⏰ Running expired subscription check and downgrade...");
@@ -300,7 +379,7 @@ const setupCronJobs = () => {
       console.error("❌ Error in expired subscription cron job:", error);
     }
   });
-  
+
   console.log("✅ All cron jobs scheduled");
 };
 
@@ -316,26 +395,29 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   console.error("🔥 Server Error:", err.stack);
-  
-  if (err.name === 'ValidationError') {
+
+  if (err.name === "ValidationError") {
     return res.status(400).json({
       success: false,
       message: "Validation error",
       errors: err.errors,
     });
   }
-  
-  if (err.name === 'SequelizeUniqueConstraintError') {
+
+  if (err.name === "SequelizeUniqueConstraintError") {
     return res.status(409).json({
       success: false,
       message: "Duplicate entry",
       field: err.errors?.[0]?.path,
     });
   }
-  
+
   res.status(err.status || 500).json({
     success: false,
-    message: process.env.NODE_ENV === "development" ? err.message : "Internal server error",
+    message:
+      process.env.NODE_ENV === "development"
+        ? err.message
+        : "Internal server error",
     ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
   });
 });
@@ -345,12 +427,14 @@ const startServer = async () => {
   try {
     await onServerStart();
     setupCronJobs();
-    
+
     const PORT = process.env.PORT;
     httpServer.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
+      console.log(
+        `🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`
+      );
     });
-    
+
     // Graceful shutdown
     const shutdown = async (signal) => {
       console.log(`\n${signal} received, shutting down gracefully...`);
@@ -358,16 +442,17 @@ const startServer = async () => {
         console.log("✅ HTTP server closed");
         process.exit(0);
       });
-      
+
       setTimeout(() => {
-        console.error("⚠️  Could not close connections in time, forcing shutdown");
+        console.error(
+          "⚠️  Could not close connections in time, forcing shutdown"
+        );
         process.exit(1);
       }, 10000);
     };
-    
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT', () => shutdown('SIGINT'));
-    
+
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
+    process.on("SIGINT", () => shutdown("SIGINT"));
   } catch (error) {
     console.error("💥 Failed to start server:", error);
     process.exit(1);

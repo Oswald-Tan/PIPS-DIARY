@@ -1,11 +1,13 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import NotFound from "./components/404";
 
-import Layout from "./layout/Layout";
+import LayoutSuperAdmin from "./layout/LayoutSuperAdmin";
 import ForgotPasswordPage from "./pages/auth/ForgotPassword";
 import LoginPage from "./pages/auth/Login";
-import Dashboard from "./pages/Dashboard";
-import ManualRateManager from "./pages/ManualRateManager";
+import Dashboard from "./pages/SuperAdmin/Dashboard";
+import ManualRateManager from "./pages/SuperAdmin/ManualRateManager";
+import User from "./pages/SuperAdmin/User";
+import ProfileSettings from "./pages/SuperAdmin/ProfileSettings";
 
 function App() {
   return (
@@ -16,10 +18,13 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
         {/* Admin Routes */}
-        <Route element={<Layout />}>
+        <Route element={<LayoutSuperAdmin />}>
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/users" element={<User />} />
           <Route path="/manual-rate" element={<ManualRateManager />} />
         </Route>
+        <Route path="/profile-settings" element={<ProfileSettings />} />
+
       </Routes>
     </Router>
   );

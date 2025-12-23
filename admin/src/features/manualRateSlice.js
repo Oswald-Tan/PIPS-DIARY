@@ -9,6 +9,7 @@ const initialState = {
   isCreating: false,
   isUpdating: false,
   isDeleting: false,
+  isDeletingPermanent: false,
   isBulkUpdating: false,
   error: null,
   success: false,
@@ -21,7 +22,7 @@ const initialState = {
   filters: {
     search: "",
     currency: "",
-    isActive: "true",
+    isActive: "", // FIX 2: Kosongkan default value
     sortBy: "effectiveFrom",
     sortOrder: "DESC",
   },
@@ -33,28 +34,29 @@ const initialState = {
 // Helper untuk menangani error response
 const handleApiError = (error) => {
   console.error("API Error:", error.response?.data || error.message);
-  
+
   if (error.response?.status === 409) {
     return {
       message: error.response.data?.message || "Duplicate entry detected",
       field: error.response.data?.field,
       suggestion: error.response.data?.suggestion,
-      code: "DUPLICATE_RATE"
+      code: "DUPLICATE_RATE",
     };
   }
-  
+
   return {
-    message: error.response?.data?.message ||
-            error.response?.data?.error ||
-            error.message ||
-            "Network error occurred",
-    code: error.response?.status || "UNKNOWN_ERROR"
+    message:
+      error.response?.data?.message ||
+      error.response?.data?.error ||
+      error.message ||
+      "Network error occurred",
+    code: error.response?.status || "UNKNOWN_ERROR",
   };
 };
 
 // ==================== ASYNC THUNKS ====================
 
-// Get all manual rates with pagination
+// Get all manual rates with pagination - FIX 2: Perbaikan filter isActive
 export const getManualRates = createAsyncThunk(
   "manualRates/getAll",
   async (params = {}, thunkAPI) => {
@@ -64,24 +66,31 @@ export const getManualRates = createAsyncThunk(
         limit = 20,
         search = "",
         currency = "",
-        isActive = "true",
+        isActive, // Terima value apa adanya
         sortBy = "effectiveFrom",
         sortOrder = "DESC",
       } = params;
 
-      // Convert string "true"/"false" to boolean for backend
-      const isActiveBool = isActive === "true" || isActive === true;
+      // Build request params
+      const requestParams = {
+        page,
+        limit,
+        search,
+        currency,
+        sortBy,
+        sortOrder,
+      };
+
+      // Kirim isActive hanya jika TIDAK undefined
+      // undefined berarti tidak ada filter, kosong ("") berarti all status
+      if (isActive !== undefined) {
+        requestParams.isActive = isActive;
+      }
+
+      console.log("📤 Request params to backend:", requestParams);
 
       const res = await axios.get(`${API_URL}/manual-rates`, {
-        params: {
-          page,
-          limit,
-          search,
-          currency,
-          isActive: isActiveBool,
-          sortBy,
-          sortOrder,
-        }
+        params: requestParams,
       });
 
       return res.data;
@@ -97,7 +106,7 @@ export const getActiveRate = createAsyncThunk(
   async ({ fromCurrency, toCurrency = "USD" }, thunkAPI) => {
     try {
       const res = await axios.get(`${API_URL}/manual-rates/active`, {
-        params: { fromCurrency, toCurrency }
+        params: { fromCurrency, toCurrency },
       });
 
       return res.data;
@@ -108,7 +117,7 @@ export const getActiveRate = createAsyncThunk(
           hasRate: false,
         });
       }
-      
+
       return thunkAPI.rejectWithValue(handleApiError(error));
     }
   }
@@ -123,11 +132,8 @@ export const createManualRate = createAsyncThunk(
       if (rateData.fromCurrency !== "IDR" || rateData.toCurrency !== "USD") {
         throw new Error("Hanya konversi IDR ke USD yang diperbolehkan");
       }
-      
-      const res = await axios.post(
-        `${API_URL}/manual-rates`,
-        rateData
-      );
+
+      const res = await axios.post(`${API_URL}/manual-rates`, rateData);
 
       return res.data;
     } catch (error) {
@@ -142,13 +148,13 @@ export const updateManualRate = createAsyncThunk(
   async ({ id, ...updateData }, thunkAPI) => {
     try {
       console.log("📝 [Frontend] Updating rate:", id, updateData);
-      
+
       // Tambahkan timestamp untuk menghindari conflict
       const dataWithTimestamp = {
         ...updateData,
-        _timestamp: Date.now()
+        _timestamp: Date.now(),
       };
-      
+
       const res = await axios.put(
         `${API_URL}/manual-rates/${id}`,
         dataWithTimestamp
@@ -175,6 +181,19 @@ export const deactivateManualRate = createAsyncThunk(
   }
 );
 
+// Delete manual rate permanently
+export const deleteManualRatePermanently = createAsyncThunk(
+  "manualRates/deletePermanent",
+  async (id, thunkAPI) => {
+    try {
+      const res = await axios.delete(`${API_URL}/manual-rates/permanent/${id}`);
+      return { id, ...res.data };
+    } catch (error) {
+      return thunkAPI.rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
 // Bulk upsert rates
 export const bulkUpsertRates = createAsyncThunk(
   "manualRates/bulkUpsert",
@@ -182,17 +201,16 @@ export const bulkUpsertRates = createAsyncThunk(
     try {
       // Validasi: hanya IDR ke USD yang diperbolehkan
       const invalidRates = bulkData.rates.filter(
-        rate => rate.fromCurrency !== "IDR" || rate.toCurrency !== "USD"
+        (rate) => rate.fromCurrency !== "IDR" || rate.toCurrency !== "USD"
       );
-      
+
       if (invalidRates.length > 0) {
-        throw new Error("Hanya rate IDR ke USD yang diperbolehkan dalam bulk operation");
+        throw new Error(
+          "Hanya rate IDR ke USD yang diperbolehkan dalam bulk operation"
+        );
       }
-      
-      const res = await axios.post(
-        `${API_URL}/manual-rates/bulk`,
-        bulkData,
-      );
+
+      const res = await axios.post(`${API_URL}/manual-rates/bulk`, bulkData);
 
       return res.data;
     } catch (error) {
@@ -220,7 +238,7 @@ export const validateConversion = createAsyncThunk(
   async ({ amount, fromCurrency, toCurrency = "USD" }, thunkAPI) => {
     try {
       const res = await axios.get(`${API_URL}/manual-rates/validate`, {
-        params: { amount, fromCurrency, toCurrency }
+        params: { amount, fromCurrency, toCurrency },
       });
       return res.data;
     } catch (error) {
@@ -240,7 +258,7 @@ const manualRateSlice = createSlice({
       state.error = null;
       state.success = false;
     },
-    
+
     // Clear all rates data
     clearRates: (state) => {
       state.rates = [];
@@ -252,49 +270,54 @@ const manualRateSlice = createSlice({
         itemsPerPage: 20,
       };
     },
-    
+
     // Update filters
     setFilters: (state, action) => {
       state.filters = { ...state.filters, ...action.payload };
       // Reset to page 1 when filters change
       state.pagination.currentPage = 1;
     },
-    
+
     // Clear filters
     clearFilters: (state) => {
       state.filters = {
         search: "",
         currency: "",
-        isActive: "true",
+        isActive: "", // FIX 2: Kosongkan saat clear filters
         sortBy: "effectiveFrom",
         sortOrder: "DESC",
       };
       state.pagination.currentPage = 1;
     },
-    
+
     // Set pagination
     setPage: (state, action) => {
       state.pagination.currentPage = action.payload;
     },
-    
+
     // Add a rate locally (optimistic update)
     addRateLocally: (state, action) => {
       state.rates.unshift(action.payload);
       state.pagination.totalItems += 1;
     },
-    
+
     // Update a rate locally (optimistic update)
     updateRateLocally: (state, action) => {
-      const index = state.rates.findIndex(rate => rate.id === action.payload.id);
+      const index = state.rates.findIndex(
+        (rate) => rate.id === action.payload.id
+      );
       if (index !== -1) {
         state.rates[index] = { ...state.rates[index], ...action.payload };
       }
     },
-    
+
     // Remove a rate locally (optimistic update)
     removeRateLocally: (state, action) => {
-      state.rates = state.rates.filter(rate => rate.id !== action.payload);
-      state.pagination.totalItems = Math.max(0, state.pagination.totalItems - 1);
+      state.rates = state.rates.filter((rate) => rate.id !== action.payload);
+      state.pagination.totalItems = Math.max(
+        0,
+        state.pagination.totalItems - 1
+      );
     },
 
     // Clear validation result
@@ -368,7 +391,7 @@ const manualRateSlice = createSlice({
         state.error = action.payload?.message || "Failed to create rate";
       })
 
-      // Update rate - PERBAIKAN UTAMA DI SINI
+      // Update rate
       .addCase(updateManualRate.pending, (state) => {
         state.isUpdating = true;
         state.error = null;
@@ -377,36 +400,36 @@ const manualRateSlice = createSlice({
       .addCase(updateManualRate.fulfilled, (state, action) => {
         state.isUpdating = false;
         state.success = true;
-        
+
         const { oldRateId, newRateId, updatedRate } = action.payload.data || {};
-        
+
         if (updatedRate) {
-          // Jika backend mengembalikan rate yang sudah diupdate
-          const index = state.rates.findIndex(rate => rate.id === updatedRate.id);
+          const index = state.rates.findIndex(
+            (rate) => rate.id === updatedRate.id
+          );
           if (index !== -1) {
-            // Update existing rate
             state.rates[index] = updatedRate;
           } else {
-            // Jika tidak ditemukan, cari berdasarkan oldRateId
-            const oldIndex = state.rates.findIndex(rate => rate.id === oldRateId);
+            const oldIndex = state.rates.findIndex(
+              (rate) => rate.id === oldRateId
+            );
             if (oldIndex !== -1) {
-              // Ganti rate lama dengan yang baru
               state.rates[oldIndex] = updatedRate;
             } else {
-              // Tambahkan sebagai rate baru
               state.rates.unshift(updatedRate);
               state.pagination.totalItems += 1;
             }
           }
         } else if (newRateId && oldRateId) {
-          // Fallback: jika hanya ada oldRateId dan newRateId
-          const index = state.rates.findIndex(rate => rate.id === oldRateId);
+          const index = state.rates.findIndex((rate) => rate.id === oldRateId);
           if (index !== -1) {
-            state.rates[index] = { 
-              ...state.rates[index], 
+            state.rates[index] = {
+              ...state.rates[index],
               id: newRateId,
               rate: action.payload.data.newRate || state.rates[index].rate,
-              effectiveFrom: action.payload.data.effectiveFrom || state.rates[index].effectiveFrom,
+              effectiveFrom:
+                action.payload.data.effectiveFrom ||
+                state.rates[index].effectiveFrom,
               lastUpdated: new Date().toISOString(),
             };
           }
@@ -414,8 +437,12 @@ const manualRateSlice = createSlice({
       })
       .addCase(updateManualRate.rejected, (state, action) => {
         state.isUpdating = false;
-        // Simpan error sebagai string
         state.error = action.payload?.message || "Failed to update rate";
+
+        if (action.payload?.code === "DUPLICATE_RATE") {
+          state.error =
+            "Rate dengan tanggal efektif tersebut sudah ada. Silakan gunakan tanggal yang berbeda.";
+        }
       })
 
       // Deactivate rate
@@ -427,12 +454,40 @@ const manualRateSlice = createSlice({
       .addCase(deactivateManualRate.fulfilled, (state, action) => {
         state.isDeleting = false;
         state.success = true;
-        state.rates = state.rates.filter(rate => rate.id !== action.payload.id);
-        state.pagination.totalItems = Math.max(0, state.pagination.totalItems - 1);
+        state.rates = state.rates.filter(
+          (rate) => rate.id !== action.payload.id
+        );
+        state.pagination.totalItems = Math.max(
+          0,
+          state.pagination.totalItems - 1
+        );
       })
       .addCase(deactivateManualRate.rejected, (state, action) => {
         state.isDeleting = false;
         state.error = action.payload?.message || "Failed to deactivate rate";
+      })
+
+      // Delete rate permanently
+      .addCase(deleteManualRatePermanently.pending, (state) => {
+        state.isDeletingPermanent = true;
+        state.error = null;
+        state.success = false;
+      })
+      .addCase(deleteManualRatePermanently.fulfilled, (state, action) => {
+        state.isDeletingPermanent = false;
+        state.success = true;
+        state.rates = state.rates.filter(
+          (rate) => rate.id !== action.payload.id
+        );
+        state.pagination.totalItems = Math.max(
+          0,
+          state.pagination.totalItems - 1
+        );
+      })
+      .addCase(deleteManualRatePermanently.rejected, (state, action) => {
+        state.isDeletingPermanent = false;
+        state.error =
+          action.payload?.message || "Failed to delete rate permanently";
       })
 
       // Bulk upsert

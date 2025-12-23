@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { motion as Motion } from "framer-motion";
 import { useSelector, useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { updateProfile, getMe, changePassword } from "../../features/authSlice";
+import { updateProfile, getMe, changePassword } from "../../../features/authSlice";
 import Swal from "sweetalert2";
 import ReactCountryFlag from "react-country-flag";
 import {

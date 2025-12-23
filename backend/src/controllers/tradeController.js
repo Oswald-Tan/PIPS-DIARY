@@ -18,6 +18,207 @@ const createOptions = (transaction) => {
   return options;
 };
 
+// ==================== BADGE PROGRESS HELPER ====================
+
+// Recalculate badge progress based on current data
+const recalculateBadgeProgress = async (userId, transaction = null) => {
+  try {
+    const userLevel = await UserLevel.findOne({
+      where: { userId },
+      ...createOptions(transaction),
+    });
+    
+    if (!userLevel) return [];
+
+    const unachievedBadges = await UserBadge.findAll({
+      where: {
+        userId,
+        achievedAt: null,
+      },
+      include: [{ model: Badge }],
+      ...createOptions(transaction),
+    });
+
+    // Recalculate progress for each unachieved badge
+    for (const userBadge of unachievedBadges) {
+      const badge = userBadge.Badge;
+      if (!badge || !badge.requirement) continue;
+
+      let progress = 0;
+      let requirement = badge.requirement;
+      
+      // Handle string JSON requirement
+      if (typeof requirement === 'string') {
+        try {
+          requirement = JSON.parse(requirement);
+        } catch (error) {
+          console.warn(`Invalid requirement format for badge ${badge.id}:`, error);
+          continue;
+        }
+      }
+
+      switch (requirement.type) {
+        case "daily_streak":
+          progress = userLevel.dailyStreak || 0;
+          break;
+
+        case "profit_streak":
+          progress = userLevel.profitStreak || 0;
+          break;
+
+        case "total_trades":
+          progress = userLevel.totalTrades || 0;
+          break;
+
+        case "risk_reward_positive":
+          // Hitung dari trades yang ada
+          const positiveRRTrades = await Trade.count({
+            where: {
+              userId,
+              riskReward: { [Op.gt]: 1.0 }
+            },
+            ...createOptions(transaction),
+          });
+          progress = positiveRRTrades;
+          break;
+
+        case "stop_loss_used":
+          const stopLossTrades = await Trade.count({
+            where: {
+              userId,
+              stop: { [Op.not]: null }
+            },
+            ...createOptions(transaction),
+          });
+          progress = stopLossTrades;
+          break;
+
+        default:
+          progress = 0;
+      }
+
+      // Update progress
+      await userBadge.update(
+        { progress },
+        createOptions(transaction)
+      );
+    }
+
+    return unachievedBadges;
+  } catch (error) {
+    console.error("Error recalculating badge progress:", error);
+    throw error;
+  }
+};
+
+// Calculate current daily streak from remaining trades
+const calculateCurrentDailyStreak = async (userId, transaction = null) => {
+  try {
+    // Get all trades sorted by date
+    const trades = await Trade.findAll({
+      where: { userId },
+      order: [['date', 'DESC']],
+      ...createOptions(transaction),
+    });
+
+    if (trades.length === 0) return 0;
+
+    let streak = 1;
+    const today = new Date().toISOString().split('T')[0];
+    const lastTradeDate = new Date(trades[0].date).toISOString().split('T')[0];
+    
+    // If last trade is not today, streak might be broken
+    if (lastTradeDate !== today) return 0;
+
+    // Count consecutive days
+    for (let i = 1; i < trades.length; i++) {
+      const currentDate = new Date(trades[i].date).toISOString().split('T')[0];
+      const prevDate = new Date(trades[i-1].date).toISOString().split('T')[0];
+      
+      const diffDays = (new Date(prevDate) - new Date(currentDate)) / (1000 * 60 * 60 * 24);
+      
+      if (diffDays === 1) {
+        streak++;
+      } else if (diffDays > 1) {
+        break; // Streak broken
+      }
+    }
+
+    return streak;
+  } catch (error) {
+    console.error("Error calculating current daily streak:", error);
+    return 0;
+  }
+};
+
+// Calculate current profit streak from remaining trades
+const calculateCurrentProfitStreak = async (userId, transaction = null) => {
+  try {
+    const trades = await Trade.findAll({
+      where: { userId },
+      order: [['date', 'DESC']],
+      ...createOptions(transaction),
+    });
+
+    if (trades.length === 0) return 0;
+
+    let streak = 0;
+    let currentStreak = 0;
+    
+    // Check for consecutive profitable trades
+    for (let i = 0; i < trades.length; i++) {
+      if (trades[i].profit > 0) {
+        currentStreak++;
+        streak = Math.max(streak, currentStreak);
+        
+        // Check if next trade is on same day (break streak)
+        if (i < trades.length - 1) {
+          const currentDate = new Date(trades[i].date).toISOString().split('T')[0];
+          const nextDate = new Date(trades[i+1].date).toISOString().split('T')[0];
+          
+          if (currentDate !== nextDate) {
+            currentStreak = 0; // Different day, reset
+          }
+        }
+      } else {
+        currentStreak = 0;
+      }
+    }
+
+    return streak;
+  } catch (error) {
+    console.error("Error calculating current profit streak:", error);
+    return 0;
+  }
+};
+
+// Recalculate all ranks for a user
+const recalculateAllRanks = async (userId, transaction = null) => {
+  try {
+    // Get all periods where user has entries
+    const userPeriods = await PeriodLeaderboard.findAll({
+      where: { userId },
+      attributes: ['periodType', 'periodValue'],
+      group: ['periodType', 'periodValue'],
+      ...createOptions(transaction),
+    });
+
+    // Recalculate ranks for each period
+    for (const period of userPeriods) {
+      await recalculatePeriodRanks(
+        period.periodType,
+        period.periodValue,
+        transaction
+      );
+    }
+
+    return userPeriods;
+  } catch (error) {
+    console.error("Error recalculating all ranks:", error);
+    throw error;
+  }
+};
+
 // ==================== GAMIFICATION HELPER FUNCTIONS ====================
 
 // Calculate required XP for a level
@@ -1152,9 +1353,14 @@ export const createTrade = async (req, res) => {
       {
         profit: finalProfit,
         result: finalResult,
+        date: date,
       },
       transaction
     );
+
+    // REVALIDATE BADGE PROGRESS (new addition)
+    // This ensures badges are properly recalculated
+    await recalculateBadgeProgress(req.userId, transaction);
 
     // Get updated stats
     const stats = await calculateStats(req.userId);
@@ -1393,8 +1599,7 @@ export const updateTrade = async (req, res) => {
   }
 };
 
-// Delete trade
-// Delete trade
+// Delete trade (SINGLE) - UPDATED VERSION
 export const deleteTrade = async (req, res) => {
   let transaction;
 
@@ -1428,10 +1633,120 @@ export const deleteTrade = async (req, res) => {
     // Hapus trade
     await trade.destroy({ transaction });
 
-    // Update period leaderboards untuk tanggal trade yang dihapus
-    await updatePeriodLeaderboards(userId, tradeDate, null, transaction);
+    // ===== UPDATE GAMIFICATION DATA =====
+    // 1. Update UserLevel (kurangi totalTrades)
+    const userLevel = await UserLevel.findOne({
+      where: { userId },
+      transaction,
+    });
+    
+    if (userLevel) {
+      await userLevel.update(
+        {
+          totalTrades: Math.max(0, (userLevel.totalTrades || 0) - 1),
+        },
+        { transaction }
+      );
 
-    // Recalculate all balances setelah delete
+      // Recalculate streaks after deletion
+      const dailyStreak = await calculateCurrentDailyStreak(userId, transaction);
+      const profitStreak = await calculateCurrentProfitStreak(userId, transaction);
+      
+      await userLevel.update(
+        {
+          dailyStreak,
+          profitStreak,
+        },
+        { transaction }
+      );
+    }
+
+    // 2. Reset progress for UNACHIEVED badges ONLY
+    await UserBadge.update(
+      { progress: 0 },
+      {
+        where: { 
+          userId,
+          achievedAt: null // Hanya reset progress untuk badge yang belum dicapai
+        },
+        transaction,
+      }
+    );
+
+    // 3. Recalculate badge progress based on remaining data
+    await recalculateBadgeProgress(userId, transaction);
+
+    // 4. Update PeriodLeaderboard untuk SEMUA PERIODE yang terpengaruh
+    const affectedPeriods = ["daily", "weekly", "monthly"];
+    
+    for (const periodType of affectedPeriods) {
+      const periodValue = getPeriodValue(new Date(tradeDate), periodType);
+      
+      // Cari entry leaderboard untuk periode ini
+      const leaderboardEntry = await PeriodLeaderboard.findOne({
+        where: {
+          userId,
+          periodType,
+          periodValue,
+        },
+        transaction,
+      });
+
+      if (leaderboardEntry) {
+        // Recalculate stats untuk periode ini
+        const startDate = calculatePeriodStart(periodType, periodValue);
+        
+        const periodTrades = await Trade.findAll({
+          where: {
+            userId,
+            date: {
+              [Op.gte]: startDate,
+              [Op.lte]: new Date(tradeDate),
+            },
+          },
+          transaction,
+        });
+
+        // Jika masih ada trades di periode ini, update stats
+        if (periodTrades.length > 0) {
+          const totalProfitOriginal = periodTrades.reduce(
+            (sum, trade) => sum + (parseFloat(trade.profit) || 0),
+            0
+          );
+          
+          const totalTrades = periodTrades.length;
+          const winTrades = periodTrades.filter((trade) =>
+            trade.result?.toLowerCase().includes("win")
+          ).length;
+          const winRate = totalTrades > 0 ? (winTrades / totalTrades) * 100 : 0;
+          
+          // Konversi ke USD
+          const user = await User.findByPk(userId, { transaction });
+          const totalProfitUSD = await currencyService.convertToUSD(
+            totalProfitOriginal,
+            user.currency || 'USD'
+          );
+
+          await leaderboardEntry.update(
+            {
+              totalProfitOriginal,
+              totalProfitUSD,
+              totalTrades,
+              winRate,
+            },
+            { transaction }
+          );
+        } else {
+          // Jika tidak ada trades sama sekali di periode ini, HAPUS entry
+          await leaderboardEntry.destroy({ transaction });
+        }
+      }
+    }
+
+    // 5. Recalculate ranks untuk semua periode
+    await recalculateAllRanks(userId, transaction);
+
+    // 6. Recalculate all balances setelah delete
     await recalculateBalances(userId, transaction);
 
     // Get updated stats
@@ -1445,9 +1760,13 @@ export const deleteTrade = async (req, res) => {
       success: true,
       message: "Trade deleted successfully",
       stats: stats,
+      gamification: {
+        badgesReset: true,
+        streaksRecalculated: true,
+        leaderboardUpdated: true,
+      },
     });
   } catch (error) {
-    // Rollback hanya jika transaction masih aktif
     if (transaction && !transaction.finished) {
       await transaction.rollback();
     }
@@ -1460,7 +1779,40 @@ export const deleteTrade = async (req, res) => {
   }
 };
 
-// Delete all trades for user
+// Helper: Calculate period start date
+const calculatePeriodStart = (periodType, periodValue) => {
+  let startDate;
+  
+  if (periodType === 'daily') {
+    startDate = new Date(periodValue);
+  } else if (periodType === 'weekly') {
+    const [year, week] = periodValue.split('-W');
+    startDate = getDateOfISOWeek(parseInt(week), parseInt(year));
+  } else {
+    // monthly
+    const [year, month] = periodValue.split('-');
+    startDate = new Date(year, parseInt(month) - 1, 1);
+  }
+  
+  return startDate;
+};
+
+// Helper: Get date of ISO week
+const getDateOfISOWeek = (week, year) => {
+  const simple = new Date(year, 0, 1 + (week - 1) * 7);
+  const dayOfWeek = simple.getDay();
+  const isoWeekStart = simple;
+  
+  if (dayOfWeek <= 4) {
+    isoWeekStart.setDate(simple.getDate() - simple.getDay() + 1);
+  } else {
+    isoWeekStart.setDate(simple.getDate() + 8 - simple.getDay());
+  }
+  
+  return isoWeekStart;
+};
+
+// Delete all trades for user - UPDATED VERSION
 export const deleteAllTrades = async (req, res) => {
   let transaction;
 
@@ -1469,47 +1821,89 @@ export const deleteAllTrades = async (req, res) => {
 
     const userId = req.userId;
 
-    // Get all trades untuk menghitung total
-    const trades = await Trade.findAll({
+    // ===== 1. GET USER DATA TERLEBIH DAHULU =====
+    const user = await User.findByPk(userId, { transaction });
+    if (!user) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // ===== 2. SIMPAN PERIODE YANG TERPENGARUH SEBELUM MENGHAPUS =====
+    const affectedPeriods = await PeriodLeaderboard.findAll({
       where: { userId },
+      attributes: ["periodType", "periodValue"],
+      group: ["periodType", "periodValue"],
       transaction,
     });
 
-    const totalTrades = trades.length;
-
-    // Simpan unique dates untuk update leaderboards
-    const uniqueDates = new Set();
-    trades.forEach((trade) => {
-      if (trade.date) {
-        uniqueDates.add(trade.date);
-      }
-    });
-
-    // Hapus semua trades
+    // ===== 3. HAPUS SEMUA TRADES =====
     const deletedCount = await Trade.destroy({
       where: { userId },
       transaction,
     });
 
-    // Reset balance ke initial balance
-    const user = await User.findByPk(userId, { transaction });
-    let newBalance = user.initialBalance;
+    // ===== 4. RESET USER DATA =====
+    // a) Reset current balance ke initial balance
+    await User.update(
+      { currentBalance: user.initialBalance },
+      { where: { id: userId }, transaction }
+    );
 
-    if (user) {
-      await user.update(
-        {
-          currentBalance: user.initialBalance,
+    // b) Reset UserLevel (tapi jangan hapus, karena mungkin ada data lain)
+    await UserLevel.destroy({
+      where: { userId },
+      transaction,
+    });
+
+    // Buat ulang UserLevel dengan default values
+    await UserLevel.create(
+      {
+        userId,
+        level: 1,
+        experience: 0,
+        totalExperience: 0,
+        dailyStreak: 0,
+        totalTrades: 0,
+        consecutiveWins: 0,
+        maxConsecutiveWins: 0,
+        profitStreak: 0,
+        lastActiveDate: null,
+        lastProfitDate: null,
+      },
+      { transaction }
+    );
+
+    // c) Reset progress badges (tapi jangan hapus achieved badges)
+    await UserBadge.update(
+      { progress: 0 },
+      {
+        where: { 
+          userId,
+          achievedAt: null // Hanya reset progress untuk badge yang belum dicapai
         },
-        { transaction }
+        transaction,
+      }
+    );
+
+    // ===== 5. HAPUS SEMUA LEADERBOARD ENTRIES =====
+    await PeriodLeaderboard.destroy({
+      where: { userId },
+      transaction,
+    });
+
+    // ===== 6. RECALCULATE RANKS UNTUK SEMUA PERIODE YANG TERPENGARUH =====
+    for (const period of affectedPeriods) {
+      await recalculatePeriodRanks(
+        period.periodType,
+        period.periodValue,
+        transaction
       );
     }
 
-    // Update period leaderboards untuk semua tanggal yang terpengaruh
-    for (const date of uniqueDates) {
-      await updatePeriodLeaderboards(userId, date, null, transaction);
-    }
-
-    // Reset atau nonaktifkan target user dan set targetBalance ke 0
+    // ===== 7. UPDATE TARGET JIKA ADA =====
     let targetAction = "none";
     const target = await Target.findOne({
       where: { userId },
@@ -1518,14 +1912,13 @@ export const deleteAllTrades = async (req, res) => {
 
     if (target) {
       if (target.enabled) {
-        // Nonaktifkan target karena tidak ada data trades dan set targetBalance ke 0
         await target.update(
           {
             enabled: false,
             targetBalance: 0,
             targetDate: null,
             description: target.description
-              ? `${target.description} (Target dinonaktifkan karena semua trades dihapus)`
+              ? `${target.description} (Dinonaktifkan - semua trades dihapus)`
               : "Target dinonaktifkan karena semua trades dihapus",
             updated_at: new Date(),
           },
@@ -1533,7 +1926,6 @@ export const deleteAllTrades = async (req, res) => {
         );
         targetAction = "disabled";
       } else {
-        // Jika target sudah dinonaktifkan, pastikan targetBalance = 0
         if (parseFloat(target.targetBalance) !== 0) {
           await target.update(
             {
@@ -1544,28 +1936,38 @@ export const deleteAllTrades = async (req, res) => {
             { transaction }
           );
           targetAction = "balance_reset";
-        } else {
-          targetAction = "already_disabled";
         }
       }
-    } else {
-      targetAction = "no_target";
     }
 
-    // Commit transaction
+    // ===== 8. LOGGING =====
+    console.log(`[DELETE ALL] User ${userId} menghapus ${deletedCount} trades`);
+    console.log(`[DELETE ALL] Periods affected: ${affectedPeriods.length}`);
+
+    // ===== 9. COMMIT TRANSACTION =====
     await transaction.commit();
     transaction = null;
 
     res.status(200).json({
       success: true,
-      message: `Successfully deleted ${deletedCount} trades`,
-      deletedCount: deletedCount,
-      newBalance: newBalance,
-      targetAction: targetAction,
-      note: "All trades deleted.",
+      message: `Berhasil menghapus ${deletedCount} trades`,
+      data: {
+        deletedCount,
+        newBalance: user.initialBalance,
+        leaderboardCleared: true,
+        userLevelReset: true,
+        badges: {
+          achievedPreserved: true, // Badge yang sudah dicapai tetap ada
+          progressReset: true,     // Progress direset ke 0 untuk yang belum dicapai
+        },
+        targetAction,
+        affectedPeriods: affectedPeriods.map(p => ({
+          type: p.periodType,
+          value: p.periodValue
+        })),
+      },
     });
   } catch (error) {
-    // Rollback hanya jika transaction masih aktif
     if (transaction && !transaction.finished) {
       await transaction.rollback();
     }
@@ -1574,6 +1976,7 @@ export const deleteAllTrades = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error: " + error.message,
+      detail: error.stack,
     });
   }
 };

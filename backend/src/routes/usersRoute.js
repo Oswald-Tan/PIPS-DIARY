@@ -12,6 +12,7 @@ import {
   listAdmin,
   editAdmin,
   getUsersByRole,
+  getUsersStats, // Tambahkan ini
 } from "../controllers/usersController.js";
 import { verifyUser, adminOnly } from "../middleware/authUser.js";
 
@@ -36,6 +37,7 @@ router.get("/list-admin", verifyUser, adminOnly, listAdmin);
 router.get("/user/:id", verifyUser, adminOnly, getUserById);
 router.get("/total-users", verifyUser, getTotalUsers);
 router.get("/by-role", verifyUser, adminOnly, getUsersByRole);
+router.get("/stats", verifyUser, adminOnly, getUsersStats); // Tambahkan route stats
 router.post("/user", verifyUser, adminOnly, createUser);
 router.post("/add-admin", verifyUser, adminOnly, upload.single('photo_profile'), addAdmin);
 router.patch("/user/:id", verifyUser, adminOnly, updateUser);

@@ -32,7 +32,7 @@ export const adminOnly = async (req, res, next) => {
   if (!user) return res.status(404).json({ message: "User not found" });
 
   //cek role name untuk akses admin
-  if (user.userRole.role_name !== "admin")
+  if (user.userRole.role_name !== "admin" && user.userRole.role_name !== "super_admin")
     return res.status(403).json({ message: "Akses terlarang" });
   next();
 };
