@@ -362,6 +362,7 @@ export const getUsers = async (req, res) => {
         "name",
         "email",
         "phone_number",
+        "status",
         "role_id",
       ],
       where: whereClause,
@@ -377,6 +378,7 @@ export const getUsers = async (req, res) => {
       role: user.userRole.role_name,
       email: user.email,
       phone_number: user.phone_number,
+      status: user.status,
     }));
 
     res.status(200).json({
@@ -413,6 +415,7 @@ export const getUserById = async (req, res) => {
         "name",
         "email",
         "phone_number",
+        "status",
         "role_id",
       ],
       include: [
@@ -434,6 +437,7 @@ export const getUserById = async (req, res) => {
       email: user.email,
       phone_number: user.phone_number,
       role: user.userRole.role_name,
+      status: user.status,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -569,7 +573,6 @@ export const createUser = async (req, res) => {
     res.status(500).json({ 
       message: "Terjadi kesalahan server",
       success: false,
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -725,7 +728,6 @@ export const updateUser = async (req, res) => {
     res.status(500).json({ 
       message: "Terjadi kesalahan server",
       success: false,
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -800,7 +802,7 @@ export const getUsersByRole = async (req, res) => {
     // Ambil data dengan pagination
     const users = await User.findAll({
       where: whereClause,
-      attributes: ["id", "name", "email", "phone_number", "role_id"],
+      attributes: ["id", "name", "email", "phone_number", "status", "role_id"],
       offset: offset,
       limit: parseInt(limit),
       order: [['name', 'ASC']]
@@ -812,6 +814,7 @@ export const getUsersByRole = async (req, res) => {
       name: user.name,
       email: user.email,
       phone_number: user.phone_number,
+      status: user.status,
       role: role,
     }));
 
@@ -846,7 +849,6 @@ export const getUsersByRole = async (req, res) => {
     res.status(500).json({ 
       message: "Terjadi kesalahan server",
       success: false,
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -922,7 +924,6 @@ export const getUsersStats = async (req, res) => {
     res.status(500).json({ 
       message: "Terjadi kesalahan server",
       success: false,
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

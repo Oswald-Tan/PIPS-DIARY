@@ -13,7 +13,8 @@ import {
   LogOut as LogOutIcon,
   ChevronUp,
   ChevronDown,
-  DollarSign
+  DollarSign,
+  Wallet
 } from "lucide-react";
 
 const Sidebar = () => {
@@ -40,6 +41,11 @@ const Sidebar = () => {
         name: "User",
         link: "/users",
         icon: User,
+      },
+      {
+        name: "Transaction",
+        link: "/transactions",
+        icon: Wallet,
       },
       {
         name: "Manual Rate",

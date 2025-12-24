@@ -59,6 +59,7 @@ const subscriptionPlans = {
       "Akses Seumur Hidup",
       "Update Gratis Selamanya",
       "Priority Support Seumur Hidup",
+      "Early Access to New Features",
     ],
     price: 799000,
   },

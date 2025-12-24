@@ -30,6 +30,7 @@ import CalenderEvent from "./routes/calendarRoutes.js";
 import Transaction from "./routes/transactionRoutes.js";
 import ManualRate from "./routes/manualRateRoute.js";
 import User from "./routes/usersRoute.js";
+import AdminDashboard from "./routes/adminDashboardRoute.js";
 
 // Import controllers
 import {
@@ -194,6 +195,23 @@ const setupManualRateValidationCron = () => {
   });
 };
 
+const setupCleanupCronJob = () => {
+  console.log("🧹 Setting up cleanup cron job (daily at 03:00)...");
+
+  cron.schedule("0 3 * * *", async () => {
+    console.log("🧹 Running transaction cleanup...");
+    try {
+      const { cleanupOldPendingTransactions } = await import(
+        "./controllers/transactionController.js"
+      );
+      await cleanupOldPendingTransactions();
+      console.log("✅ Cleanup completed");
+    } catch (error) {
+      console.error("❌ Cleanup cron job failed:", error);
+    }
+  });
+};
+
 // ==================== SERVER CONFIGURATION ====================
 // store.sync(); // Hapus komentar jika perlu table sessions
 
@@ -239,22 +257,43 @@ if (process.env.NODE_ENV === "production") {
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [];
 
+// app.js - Versi simple untuk development & production
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (!allowedOrigins.includes(origin)) {
-        console.warn(`🚫 CORS blocked: ${origin}`);
-        return callback(
-          new Error(`CORS policy: Origin ${origin} not allowed`),
-          false
-        );
+    origin: function (origin, callback) {
+      // === IZINKAN SEMUA ORIGIN DI DEVELOPMENT ===
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🔧 Development: Allowing origin ${origin || 'No Origin'}`);
+        return callback(null, true);
       }
-      return callback(null, true);
+      
+      // === DI PRODUCTION: HANYA ORIGIN YANG DIAKUI ===
+      const allowedOrigins = [
+        'https://app.pipsdiary.com',
+        'https://pipsdiary.com',
+        'https://www.pipsdiary.com',
+        'https://admin.pipsdiary.com',
+        'https://api.pipsdiary.com'
+      ];
+      
+      // Izinkan request tanpa origin (Midtrans, dll)
+      if (!origin) {
+        console.log("🌐 Allowing request without origin (Midtrans)");
+        return callback(null, true);
+      }
+      
+      if (allowedOrigins.includes(origin)) {
+        console.log(`✅ Allowing production origin: ${origin}`);
+        return callback(null, true);
+      }
+      
+      console.warn(`❌ CORS blocked: ${origin}`);
+      return callback(new Error('Not allowed by CORS'), false);
     },
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    exposedHeaders: ["set-cookie"]
   })
 );
 
@@ -328,6 +367,7 @@ app.use("/api/v1/calendar", CalenderEvent);
 app.use("/api/v1/transactions", Transaction);
 app.use("/api/v1/manual-rates", ManualRate);
 app.use("/api/v1/user", User);
+app.use("/api/v1/admin-dashboard", AdminDashboard);
 
 // ==================== CRON JOBS ====================
 const setupCronJobs = () => {
@@ -379,6 +419,9 @@ const setupCronJobs = () => {
       console.error("❌ Error in expired subscription cron job:", error);
     }
   });
+
+  // Cleanup old pending transactions
+  setupCleanupCronJob();
 
   console.log("✅ All cron jobs scheduled");
 };

@@ -32,7 +32,6 @@ import {
 } from "../../features/subscriptionSlice";
 
 // Komponen Modal Downgrade Confirmation
-// Komponen Modal Downgrade Confirmation
 const DowngradeConfirmationModal = ({
   showModal,
   setShowModal,
@@ -41,10 +40,12 @@ const DowngradeConfirmationModal = ({
   selectedPlan = "free",
 }) => {
   const navigate = useNavigate();
-  
+
   // Ambil subscription dari state subscriptionSlice, bukan dari auth
-  const { subscription: reduxSubscription } = useSelector((state) => state.subscription);
-  
+  const { subscription: reduxSubscription } = useSelector(
+    (state) => state.subscription
+  );
+
   // Juga ambil dari auth untuk fallback
   const { user } = useSelector((state) => state.auth);
 
@@ -97,7 +98,8 @@ const DowngradeConfirmationModal = ({
   };
 
   // Tentukan plan current user - prioritaskan dari subscriptionSlice, kemudian dari auth
-  const currentPlan = reduxSubscription?.plan || user?.subscription?.plan || "free";
+  const currentPlan =
+    reduxSubscription?.plan || user?.subscription?.plan || "free";
   const currentPlanData = plans[currentPlan] || plans.free;
   const CurrentPlanIcon = currentPlanData.icon;
 
@@ -105,16 +107,16 @@ const DowngradeConfirmationModal = ({
     reduxSubscription,
     authSubscription: user?.subscription,
     currentPlan,
-    selectedPlan
+    selectedPlan,
   });
 
   // Fitur yang akan hilang (fitur di current plan yang tidak ada di free plan)
   const getFeaturesToLose = () => {
     const freeFeatures = plans.free.features;
     const currentFeatures = currentPlanData.features;
-    
+
     // Kembalikan fitur yang ada di current plan tapi tidak ada di free plan
-    return currentFeatures.filter(feature => !freeFeatures.includes(feature));
+    return currentFeatures.filter((feature) => !freeFeatures.includes(feature));
   };
 
   const featuresToLose = getFeaturesToLose();
@@ -158,7 +160,8 @@ const DowngradeConfirmationModal = ({
                 Anda Sudah Menggunakan Free Plan
               </h2>
               <p className="text-slate-600 mb-6">
-                Anda tidak dapat melakukan downgrade karena sudah menggunakan plan gratis.
+                Anda tidak dapat melakukan downgrade karena sudah menggunakan
+                plan gratis.
               </p>
               <div className="flex flex-col gap-3">
                 <Motion.button
@@ -217,7 +220,8 @@ const DowngradeConfirmationModal = ({
                   Downgrade ke Free Plan
                 </h2>
                 <p className="text-sm text-slate-600 mt-1">
-                  Konfirmasi perubahan dari {currentPlanData.name} Plan ke Free Plan
+                  Konfirmasi perubahan dari {currentPlanData.name} Plan ke Free
+                  Plan
                 </p>
               </div>
             </div>
@@ -235,32 +239,38 @@ const DowngradeConfirmationModal = ({
           {/* Current Plan Badge */}
           <div className="mb-6">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-linear-to-r from-slate-100 to-slate-200 rounded-full border border-slate-300">
-              <div className={`w-2 h-2 rounded-full ${
-                currentPlan === "pro" 
-                  ? "bg-violet-500" 
-                  : currentPlan === "lifetime" 
-                    ? "bg-amber-500" 
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  currentPlan === "pro"
+                    ? "bg-violet-500"
+                    : currentPlan === "lifetime"
+                    ? "bg-amber-500"
                     : "bg-slate-500"
-              }`}></div>
+                }`}
+              ></div>
               <span className="text-sm font-semibold text-slate-700">
                 Current Plan:{" "}
-                <span className={`${
-                  currentPlan === "pro" 
-                    ? "text-violet-700" 
-                    : currentPlan === "lifetime" 
-                      ? "text-amber-700" 
+                <span
+                  className={`${
+                    currentPlan === "pro"
+                      ? "text-violet-700"
+                      : currentPlan === "lifetime"
+                      ? "text-amber-700"
                       : "text-slate-700"
-                } capitalize`}>
+                  } capitalize`}
+                >
                   {currentPlan}
                 </span>
               </span>
-              <CurrentPlanIcon className={`w-4 h-4 ${
-                currentPlan === "pro" 
-                  ? "text-violet-600" 
-                  : currentPlan === "lifetime" 
-                    ? "text-amber-600" 
+              <CurrentPlanIcon
+                className={`w-4 h-4 ${
+                  currentPlan === "pro"
+                    ? "text-violet-600"
+                    : currentPlan === "lifetime"
+                    ? "text-amber-600"
                     : "text-slate-600"
-              }`} />
+                }`}
+              />
             </div>
           </div>
 
@@ -275,8 +285,8 @@ const DowngradeConfirmationModal = ({
                 <p className="text-sm text-amber-700 mt-1">
                   Anda akan menurunkan plan dari{" "}
                   <span className="font-bold">{currentPlanData.name}</span> ke{" "}
-                  <span className="font-bold">Free</span>. 
-                  Beberapa fitur premium akan tidak tersedia lagi.
+                  <span className="font-bold">Free</span>. Beberapa fitur
+                  premium akan tidak tersedia lagi.
                 </p>
               </div>
             </div>
@@ -287,7 +297,7 @@ const DowngradeConfirmationModal = ({
             <h3 className="text-lg font-bold text-slate-800 mb-4">
               Perbandingan Fitur
             </h3>
-            
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Features to Lose */}
               <div className="border border-red-200 rounded-xl p-4 bg-linear-to-br from-red-50/50 to-rose-50/50">
@@ -310,7 +320,9 @@ const DowngradeConfirmationModal = ({
                           <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center mt-0.5 shrink-0">
                             <X className="w-3 h-3 text-red-500" />
                           </div>
-                          <span className="text-sm text-slate-700">{feature}</span>
+                          <span className="text-sm text-slate-700">
+                            {feature}
+                          </span>
                         </li>
                       </Motion.div>
                     ))
@@ -328,7 +340,9 @@ const DowngradeConfirmationModal = ({
                   <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
                     <Check className="w-4 h-4 text-emerald-600" />
                   </div>
-                  <h4 className="font-bold text-emerald-700">Yang tetap ada:</h4>
+                  <h4 className="font-bold text-emerald-700">
+                    Yang tetap ada:
+                  </h4>
                 </div>
                 <ul className="space-y-2">
                   {featuresToKeep.map((feature, index) => (
@@ -342,7 +356,9 @@ const DowngradeConfirmationModal = ({
                         <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center mt-0.5 shrink-0">
                           <Check className="w-3 h-3 text-emerald-500" />
                         </div>
-                        <span className="text-sm text-slate-700">{feature}</span>
+                        <span className="text-sm text-slate-700">
+                          {feature}
+                        </span>
                       </li>
                     </Motion.div>
                   ))}
@@ -355,14 +371,16 @@ const DowngradeConfirmationModal = ({
           <div className="mb-6 space-y-4">
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
               <p className="text-sm text-slate-700">
-                <span className="font-bold">Sisa Entri Trading:</span> Jika Anda memiliki lebih dari 30 entri, 
-                Anda tetap dapat melihat semuanya tetapi tidak dapat menambahkan baru hingga di bawah batas.
+                <span className="font-bold">Sisa Entri Trading:</span> Jika Anda
+                memiliki lebih dari 30 entri, Anda tetap dapat melihat semuanya
+                tetapi tidak dapat menambahkan baru hingga di bawah batas.
               </p>
             </div>
-            
+
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-700">
-                <span className="font-bold">Data Anda Aman:</span> Semua data trading yang sudah Anda input akan tetap tersimpan dengan aman.
+                <span className="font-bold">Data Anda Aman:</span> Semua data
+                trading yang sudah Anda input akan tetap tersimpan dengan aman.
               </p>
             </div>
           </div>
@@ -432,6 +450,8 @@ const Layout = () => {
   const { subscription: reduxSubscription, isLoading: subscriptionLoading } =
     useSelector((state) => state.subscription);
 
+  const subscription = reduxSubscription;
+
   // Local state
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
@@ -441,6 +461,7 @@ const Layout = () => {
     useState(false);
   const [localSubscriptionError, setLocalSubscriptionError] = useState(false);
   const [localSubscriptionMessage, setLocalSubscriptionMessage] = useState("");
+
   // State untuk Snap Embed
   const [showEmbed, setShowEmbed] = useState(false);
   const [embedToken, setEmbedToken] = useState(null);
@@ -693,7 +714,7 @@ const Layout = () => {
             storedPlan = transaction.plan;
           } else if (transaction.status === "PAID") {
             // Jika sudah dibayar, redirect ke success
-            navigate(`/checkout/success?order_id=${orderId}`, {
+            navigate(`/checkout-success?order_id=${orderId}`, {
               state: {
                 orderId: orderId,
                 status: "PAID",
@@ -774,46 +795,76 @@ const Layout = () => {
   // Handle back button
   const handleBack = () => {
     if (showEmbed) {
-      // Tampilkan konfirmasi
       Swal.fire({
         title: "Batalkan Pembayaran?",
-        text: "Apakah Anda yakin ingin membatalkan pembayaran?",
+        html: `
+        <div class="text-left">
+          <p>Apakah Anda yakin ingin membatalkan pembayaran ini?</p>
+          <ul class="text-sm text-slate-600 mt-2 space-y-1">
+            <li>• Transaksi akan <strong>dibatalkan</strong> dan tidak dapat dilanjutkan</li>
+            <li>• Order ID: <code class="bg-slate-100 px-1 rounded">${embedOrderId}</code></li>
+            <li>• Untuk melanjutkan, Anda perlu membuat transaksi baru</li>
+          </ul>
+          <p class="mt-3 text-sm text-amber-600">Pembatalan tidak dapat dibatalkan ulang.</p>
+        </div>
+      `,
         icon: "warning",
         showCancelButton: true,
         confirmButtonText: "Ya, Batalkan",
         cancelButtonText: "Lanjutkan Bayar",
         confirmButtonColor: "#dc2626",
+        cancelButtonColor: "#7c3aed",
       }).then(async (result) => {
         if (result.isConfirmed) {
-          // Kirim request untuk cancel transaction
           try {
-            await axios.post(
-              `${API_URL}/transactions/${embedOrderId}/cancel`,
-              {}
+            // Panggil API untuk membatalkan transaksi
+            const cancelResponse = await axios.post(
+              `${API_URL}/transactions/${embedOrderId}/cancel`
             );
 
-            console.log("Transaction cancelled successfully");
+            if (cancelResponse.data.success) {
+              // Hapus dari localStorage
+              localStorage.removeItem("lastTransaction");
+              localStorage.removeItem("pendingPayment");
+
+              // Cleanup Snap Embed
+              setShowEmbed(false);
+              setEmbedLoaded(false);
+              setEmbedToken(null);
+              setEmbedOrderId("");
+
+              const embedContainer = document.getElementById(
+                "snap-embed-container"
+              );
+              if (embedContainer) {
+                embedContainer.innerHTML = "";
+              }
+              snapEmbedInstance.current = null;
+
+              // Navigasi ke halaman transaksi dengan status canceled
+              navigate(`/checkout-success?order_id=${embedOrderId}`, {
+                state: {
+                  orderId: embedOrderId,
+                  status: "CANCELED",
+                  plan: selectedPlan,
+                  note: "Pembayaran telah dibatalkan oleh pengguna",
+                },
+              });
+            } else {
+              throw new Error(cancelResponse.data.message);
+            }
           } catch (error) {
-            console.error("Failed to cancel transaction:", error);
+            console.error("❌ Gagal membatalkan transaksi:", error);
+            Swal.fire({
+              icon: "error",
+              title: "Gagal Membatalkan",
+              text:
+                error.response?.data?.message ||
+                "Gagal membatalkan transaksi. Silakan coba lagi.",
+            });
           }
-
-          // Reset state
-          setShowEmbed(false);
-          setEmbedLoaded(false);
-          setEmbedToken(null);
-          setEmbedOrderId("");
-
-          // Cleanup
-          const embedContainer = document.getElementById(
-            "snap-embed-container"
-          );
-          if (embedContainer) {
-            embedContainer.innerHTML = "";
-          }
-          snapEmbedInstance.current = null;
-
-          navigate("/upgrade");
         }
+        // Jika cancel (Lanjutkan Bayar), tidak melakukan apa-apa, biarkan user tetap di embed
       });
     } else {
       navigate("/upgrade");
@@ -896,7 +947,7 @@ const Layout = () => {
     setShowDowngradeModal(true);
   };
 
-  // Setup Snap Embed dengan cleanup yang lebih aman
+  // Setup Snap Embed
   const setupSnapEmbed = () => {
     if (!embedToken || !window.snap) {
       console.error("Snap embed setup failed: Missing token or Snap instance");
@@ -906,7 +957,6 @@ const Layout = () => {
     console.log("🎯 Setting up Snap Embed...");
     setEmbedLoaded(false);
 
-    // Hapus konten sebelumnya jika ada (gunakan try-catch untuk safety)
     try {
       const embedContainer = document.getElementById("snap-embed-container");
       if (embedContainer) {
@@ -916,10 +966,8 @@ const Layout = () => {
       console.warn("Error cleaning embed container:", error);
     }
 
-    // Gunakan setTimeout untuk memastikan DOM sudah siap
     setTimeout(() => {
       try {
-        // Gunakan snap.embed untuk menampilkan pembayaran
         window.snap.embed(embedToken, {
           embedId: "snap-embed-container",
           onSuccess: function (result) {
@@ -936,22 +984,18 @@ const Layout = () => {
           },
           onClose: function () {
             console.log("🔴 Embed closed by user");
-            // Saat user menutup embed, tetap arahkan ke pending untuk pengecekan
-            // Tapi JANGAN bersihkan embed sepenuhnya - biarkan user bisa kembali
-            handlePaymentComplete("closed");
+            // Tidak melakukan apapun, biarkan user tutup sendiri
           },
         });
 
-        // Set flag untuk menunjukkan embed sudah diinisialisasi
         snapEmbedInstance.current = true;
 
-        // Set timeout untuk menunjukkan loading selesai
         setTimeout(() => {
           setEmbedLoaded(true);
         }, 1000);
       } catch (error) {
         console.error("Error setting up Snap embed:", error);
-        setEmbedLoaded(true); // Tetap tampilkan meski ada error
+        setEmbedLoaded(true);
 
         Swal.fire({
           icon: "error",
@@ -967,13 +1011,12 @@ const Layout = () => {
 
   // Handle payment completion
   const handlePaymentComplete = (status, result = null) => {
-    // Tidak cleanup embed sepenuhnya agar bisa dilanjutkan nanti
     setShowEmbed(false);
     setEmbedLoaded(false);
 
     switch (status) {
       case "success":
-        navigate(`/checkout/success?order_id=${embedOrderId}`, {
+        navigate(`/checkout-success?order_id=${embedOrderId}`, {
           state: {
             orderId: embedOrderId,
             status: "PAID",
@@ -983,20 +1026,17 @@ const Layout = () => {
         });
         break;
       case "pending":
-      case "closed":
-        // Saat pending atau closed, arahkan ke success dengan status pending
-        // Tapi simpan token agar bisa dilanjutkan
-        navigate(`/checkout/success?order_id=${embedOrderId}`, {
+        navigate(`/checkout-success?order_id=${embedOrderId}`, {
           state: {
             orderId: embedOrderId,
             status: "PENDING",
             plan: selectedPlan,
-            snapToken: embedToken, // Simpan token untuk continue
+            note: "Pembayaran sedang diproses. Status akan update otomatis.",
           },
         });
         break;
       case "error":
-        navigate(`/checkout/error?order_id=${embedOrderId}`, {
+        navigate(`/checkout-success?order_id=${embedOrderId}`, {
           state: {
             orderId: embedOrderId,
             status: "ERROR",
@@ -1014,6 +1054,188 @@ const Layout = () => {
       setupSnapEmbed();
     }
   }, [showEmbed, embedToken]);
+
+  // Fungsi utama untuk memulai pembayaran
+  const handleStartPayment = async () => {
+    setIsProcessingPayment(true);
+
+    try {
+      console.log("📝 Creating payment session...");
+
+      // 1. Buat payment session di backend
+      const createResponse = await axios.post(
+        `${API_URL}/transactions/create`,
+        {
+          plan: selectedPlan,
+          paymentMethod: "qris", // atau ambil dari pilihan user
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      console.log("Payment session response:", createResponse.data);
+
+      if (!createResponse.data.success) {
+        throw new Error(
+          createResponse.data.message || "Gagal membuat sesi pembayaran"
+        );
+      }
+
+      const { token, orderId } = createResponse.data.data;
+      console.log(`✅ Payment session created: ${orderId}`);
+
+      // 2. Simpan ke localStorage untuk bisa continue nanti
+      localStorage.setItem(
+        "pendingPayment",
+        JSON.stringify({
+          orderId: orderId,
+          plan: selectedPlan,
+          token: token,
+          timestamp: new Date().toISOString(),
+        })
+      );
+
+      // 3. Set token dan orderId untuk Snap Embed
+      setEmbedToken(token);
+      setEmbedOrderId(orderId);
+
+      // 4. Tampilkan embed fullscreen
+      setIsProcessingPayment(false);
+      setShowEmbed(true);
+    } catch (error) {
+      console.error("❌ Payment error:", error);
+
+      let errorMsg = error.message;
+      if (error.response?.data?.message) {
+        errorMsg = error.response.data.message;
+      }
+
+      // Handle duplicate error dengan lebih baik
+      if (error.response?.data?.error?.includes("Duplicate entry")) {
+        errorMsg =
+          "Sesi pembayaran sebelumnya masih aktif. Silakan coba lagi dalam 30 detik.";
+
+        // Coba dapatkan order ID dari error response
+        const match = error.response.data.error.match(
+          /order_id: (ORDER-\d+-\d+)/
+        );
+        if (match) {
+          const existingOrderId = match[1];
+          errorMsg += ` Order ID: ${existingOrderId}`;
+
+          // Tawarkan untuk melanjutkan pembayaran yang ada
+          Swal.fire({
+            icon: "warning",
+            title: "Sesi Pembayaran Aktif Ditemukan",
+            html: `
+              <div class="text-left">
+                <p>Anda sudah memiliki sesi pembayaran yang aktif:</p>
+                <p class="font-mono bg-slate-100 p-2 rounded mt-2">${existingOrderId}</p>
+                <p class="text-sm text-slate-600 mt-2">Apakah Anda ingin melanjutkan pembayaran ini?</p>
+              </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: "Ya, Lanjutkan",
+            cancelButtonText: "Buat Baru",
+            confirmButtonColor: "#7c3aed",
+          }).then((result) => {
+            if (result.isConfirmed) {
+              // Lanjutkan pembayaran yang ada
+              navigate("/checkout", {
+                state: {
+                  plan: selectedPlan,
+                  orderId: existingOrderId,
+                  continuePayment: true,
+                },
+              });
+            } else {
+              // Refresh halaman untuk mencoba lagi
+              setTimeout(() => window.location.reload(), 1000);
+            }
+          });
+        }
+      } else {
+        Swal.fire({
+          icon: "error",
+          title: "Oops...",
+          text: errorMsg,
+        });
+      }
+
+      setIsProcessingPayment(false);
+    }
+  };
+
+  // Fungsi untuk melanjutkan pembayaran yang tertunda
+  const handleContinuePendingPayment = async (orderId) => {
+    setIsContinuingPayment(true);
+    try {
+      console.log(`🔄 Continuing payment for: ${orderId}`);
+
+      // Cek dulu apakah transaksi masih valid
+      const statusResponse = await axios.get(
+        `${API_URL}/transactions/status/${orderId}`
+      );
+
+      if (statusResponse.data.success) {
+        const transaction = statusResponse.data.data;
+
+        if (transaction.status === "PAID") {
+          // Sudah dibayar, redirect ke success
+          navigate(`/checkout-success?order_id=${orderId}`, {
+            state: {
+              orderId: orderId,
+              status: "PAID",
+              plan: transaction.plan,
+            },
+          });
+          return;
+        } else if (transaction.status === "PENDING_PAYMENT") {
+          // Masih pending, dapatkan token dan lanjutkan
+          const token = transaction.snap_token;
+          if (token) {
+            setEmbedToken(token);
+            setEmbedOrderId(orderId);
+            setTimeout(() => {
+              setShowEmbed(true);
+              setIsContinuingPayment(false);
+            }, 500);
+          } else {
+            throw new Error("Token pembayaran tidak tersedia");
+          }
+        } else {
+          // Status lainnya
+          Swal.fire({
+            icon: "info",
+            title: "Status Transaksi",
+            text: `Transaksi ini sudah ${transaction.status.toLowerCase()}.`,
+            confirmButtonText: "OK",
+          });
+          navigate("/upgrade");
+        }
+      }
+    } catch (error) {
+      console.error("❌ Gagal melanjutkan pembayaran:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Gagal Melanjutkan",
+        text: "Silakan buat transaksi baru.",
+      });
+      setIsContinuingPayment(false);
+      navigate("/upgrade");
+    }
+  };
+
+  // Handle continue payment saat komponen dimuat
+  useEffect(() => {
+    if (isContinuePayment && continueOrderId) {
+      console.log("🔄 Continue payment detected:", continueOrderId);
+      handleContinuePendingPayment(continueOrderId);
+    }
+  }, [isContinuePayment, continueOrderId]);
 
   // Handle paid checkout dengan Snap Embed
   const handlePaidCheckout = async () => {
@@ -1124,8 +1346,8 @@ const Layout = () => {
     if (plan.price > 0 && !isScriptLoaded) {
       Swal.fire({
         icon: "error",
-        title: "Oops...",
-        text: "Sistem pembayaran sedang dimuat. Harap tunggu beberapa detik dan coba lagi.",
+        title: "Sistem Pembayaran Sedang Dimuat",
+        text: "Harap tunggu beberapa detik dan coba lagi.",
       });
       return;
     }
@@ -1137,7 +1359,7 @@ const Layout = () => {
     }
 
     // Handle paid plan
-    handlePaidCheckout();
+    handleStartPayment();
   };
 
   // Tentukan status loading
@@ -1150,10 +1372,7 @@ const Layout = () => {
   return (
     <div className="min-h-screen py-8 px-4 bg-slate-50 relative">
       {/* Loading Overlay untuk semua proses */}
-      {(isProcessingPayment ||
-        isDowngrading ||
-        subscriptionLoading ||
-        isContinuingPayment) && (
+      {isLoading && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl p-8 text-center max-w-md mx-4">
             <Loader2 className="w-12 h-12 animate-spin text-violet-600 mx-auto mb-4" />

@@ -586,7 +586,7 @@ export const getUserGamificationProfile = async (req, res) => {
   }
 };
 
-// Get all available badges
+// controllers/gamification.js - getAllBadges - VERSI DIPERBAIKI
 export const getAllBadges = async (req, res) => {
   try {
     const badges = await Badge.findAll({
@@ -604,40 +604,45 @@ export const getAllBadges = async (req, res) => {
 
     const badgesWithProgress = badges.map((badge) => {
       const userBadge = userBadges.find((ub) => ub.badgeId === badge.id);
-
-      // FIX: Handle requirement value safely
+      
+      // **FIXED: Pastikan requirementValue selalu berupa number**
       let requirementValue = 0;
-
+      
+      // Handle requirement parsing dengan robust
       try {
-        // Jika requirement adalah string JSON, parse dulu
-        const requirement =
-          typeof badge.requirement === "string"
-            ? JSON.parse(badge.requirement)
-            : badge.requirement;
-
-        requirementValue = requirement?.value || 0;
+        // Jika requirement adalah string JSON
+        if (typeof badge.requirement === 'string') {
+          const parsed = JSON.parse(badge.requirement);
+          requirementValue = Number(parsed.value) || 0;
+        } 
+        // Jika requirement sudah berupa object (hasil parsing Sequelize)
+        else if (badge.requirement && typeof badge.requirement === 'object') {
+          requirementValue = Number(badge.requirement.value) || 0;
+        }
       } catch (error) {
-        console.warn(`Error parsing requirement for badge ${badge.id}:`, error);
-        requirementValue = 0;
+        console.error(`Error parsing requirement for badge ${badge.id}:`, error);
+        // Fallback: extract number from string
+        const reqString = String(badge.requirement || '');
+        const match = reqString.match(/"value":\s*(\d+)/);
+        requirementValue = match ? Number(match[1]) : 0;
       }
 
-      console.log("Badge requirement structure:", {
-        badgeId: badge.id,
-        requirement: badge.requirement,
-        type: typeof badge.requirement,
-        parsed:
-          typeof badge.requirement === "string"
-            ? JSON.parse(badge.requirement)
-            : badge.requirement,
-      });
-
-      return {
-        ...badge.toJSON(),
+      const result = {
+        id: badge.id,
+        name: badge.name,
+        description: badge.description,
+        type: badge.type,
+        icon: badge.icon,
+        color: badge.color,
+        rarity: badge.rarity,
+        xpReward: badge.xpReward,
         progress: userBadge?.progress || 0,
-        requirementValue: requirementValue, // Tambahkan field ini
+        requirementValue: requirementValue, // **INI HARUS NUMBER**
         achieved: !!userBadge?.achievedAt,
         achievedAt: userBadge?.achievedAt,
       };
+
+      return result;
     });
 
     res.json({
@@ -652,6 +657,7 @@ export const getAllBadges = async (req, res) => {
     });
   }
 };
+
 
 // Get leaderboard dengan filter periode
 export const getLeaderboard = async (req, res) => {

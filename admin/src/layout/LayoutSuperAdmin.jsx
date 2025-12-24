@@ -28,6 +28,7 @@ const LayoutSuperAdmin = () => {
   // Get active tab from route
   const activeTab = useMemo(() => {
     if (location.pathname.includes("/users")) return "users";
+    if (location.pathname.includes("/transactions")) return "transactions";
     if (location.pathname.includes("/manual-rate")) return "manual-rate";
     return "dashboard";
   }, [location.pathname]);

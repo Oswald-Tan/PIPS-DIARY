@@ -79,6 +79,12 @@ const Transaction = db.define(
       type: DataTypes.JSON,
       allowNull: true,
     },
+    is_visible: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+
     created_at: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW,

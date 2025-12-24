@@ -48,7 +48,7 @@ export default function Pricing() {
         "Akses Seumur Hidup",
         "Update Gratis Selamanya",
         "Priority Support Seumur Hidup",
-        "Early Access ke Fitur Baru",
+        "Early Access to New Features",
       ],
       cta: "Get Lifetime",
       popular: false,

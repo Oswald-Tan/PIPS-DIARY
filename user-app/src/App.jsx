@@ -24,13 +24,14 @@ import CheckoutPending from "./components/CheckoutPending";
 import CheckoutError from "./components/CheckoutError";
 import TransactionHistory from "./pages/TransactionHistory";
 import SubscriptionDetails from "./pages/SubscriptionDetails";
+import TermsPage from "./pages/Legal/TermsPage";
+import PrivacyPolicyPage from "./pages/Legal/PrivacyPolicyPage";
 
 function App() {
   return (
     <>
       <Router>
         <Routes>
-          <Route path="*" element={<NotFoundPage />} />
           <Route path="/" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -55,15 +56,23 @@ function App() {
 
           <Route path="/upgrade" element={<UpgradePage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
-          <Route path="/checkout/success" element={<CheckoutSuccess />} />
-          <Route path="/checkout/pending" element={<CheckoutPending />} />
-          <Route path="/checkout/error" element={<CheckoutError />} />
+          <Route path="/checkout-success" element={<CheckoutSuccess />} />
+          <Route path="/checkout-pending" element={<CheckoutPending />} />
+          <Route path="/checkout-error" element={<CheckoutError />} />
           <Route path="/transactions" element={<TransactionHistory />} />
-          <Route path="/subscription/details" element={<SubscriptionDetails />} />
+          <Route
+            path="/subscription/details"
+            element={<SubscriptionDetails />}
+          />
           <Route path="/profile-settings" element={<ProfileSettings />} />
 
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/resend-verification" element={<VerifyEmailPage />} />
+
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPolicyPage />} />
+
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Router>
     </>

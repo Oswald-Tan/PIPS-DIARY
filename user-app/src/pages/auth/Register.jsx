@@ -17,8 +17,6 @@ import {
   Shield,
   Globe,
 } from "lucide-react";
-import { sortedCountries } from "../../utils/countryList";
-import ReactCountryFlag from "react-country-flag";
 import CountrySelect from "../../components/CountrySelect";
 
 const RegisterPage = ({ onShowTradingJournal }) => {
@@ -167,6 +165,8 @@ const RegisterPage = ({ onShowTradingJournal }) => {
     // Add country validation
     if (!formData.country) {
       errors.country = "Please select your country";
+    } else if (formData.country.length !== 3) {
+      errors.country = "Invalid country code";
     }
 
     setFormErrors(errors);
@@ -186,6 +186,7 @@ const RegisterPage = ({ onShowTradingJournal }) => {
           name: formData.name,
           email: formData.email,
           password: formData.password,
+          country: formData.country,
         })
       );
     }
@@ -274,7 +275,7 @@ const RegisterPage = ({ onShowTradingJournal }) => {
                 className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl mb-6 text-sm font-light flex items-center justify-between"
               >
                 <div className="flex items-center">
-                  <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
+                  <AlertCircle className="w-4 h-4 mr-2 shrink-0" />
                   <span>{error || message}</span>
                 </div>
                 <button
@@ -538,19 +539,17 @@ const RegisterPage = ({ onShowTradingJournal }) => {
                   className="ml-2 block text-sm text-slate-700 font-light"
                 >
                   I agree to the{" "}
-                  <a
-                    href="#"
+                  <Link to ="/terms"
                     className="font-medium bg-linear-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent hover:from-violet-700 hover:to-purple-700 transition-all duration-300"
                   >
                     Terms of Service
-                  </a>{" "}
+                  </Link>{" "}
                   and{" "}
-                  <a
-                    href="#"
+                  <Link to="/privacy"
                     className="font-medium bg-linear-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent hover:from-violet-700 hover:to-purple-700 transition-all duration-300"
                   >
                     Privacy Policy
-                  </a>
+                  </Link>
                 </label>
               </div>
               {formErrors.agreeToTerms && (

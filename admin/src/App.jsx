@@ -8,6 +8,7 @@ import Dashboard from "./pages/SuperAdmin/Dashboard";
 import ManualRateManager from "./pages/SuperAdmin/ManualRateManager";
 import User from "./pages/SuperAdmin/User";
 import ProfileSettings from "./pages/SuperAdmin/ProfileSettings";
+import Transaction from "./pages/SuperAdmin/Transaction";
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
         <Route element={<LayoutSuperAdmin />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/users" element={<User />} />
+          <Route path="/transactions" element={<Transaction />} />
           <Route path="/manual-rate" element={<ManualRateManager />} />
         </Route>
         <Route path="/profile-settings" element={<ProfileSettings />} />

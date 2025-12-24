@@ -7,6 +7,7 @@ const initialState = {
   isError: false,
   isSuccess: false,
   isLoading: false,
+  isAuthChecked: false,
   message: "",
   error: "",
 };
@@ -41,7 +42,8 @@ export const RegisterUser = createAsyncThunk(
         name: user.name,
         email: user.email,
         password: user.password,
-        role_id: user.role_id || 2,
+        country: user.country,
+        role_id: user.role_id || 4,
       });
       return res.data;
     } catch (error) {
@@ -280,16 +282,19 @@ export const authSlice = createSlice({
     // Get User Login
     builder.addCase(getMe.pending, (state) => {
       state.isLoading = true;
+      state.isAuthChecked = false;
     });
     builder.addCase(getMe.fulfilled, (state, action) => {
       state.isLoading = false;
       state.isSuccess = true;
       state.user = action.payload;
+      state.isAuthChecked = true;
     });
     builder.addCase(getMe.rejected, (state, action) => {
       state.isLoading = false;
       state.isError = true;
       state.message = action.payload;
+      state.isAuthChecked = true;
     });
 
     // Tambahkan di extraReducers

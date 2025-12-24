@@ -10,6 +10,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { format } from "date-fns";
 import { id } from "date-fns/locale";
+import db from "../config/database.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -99,15 +100,15 @@ const generateInvoiceNumber = async (maxRetries = 3) => {
   return `INV/EMERGENCY/${timestamp}-${random}`;
 };
 
-// === CREATE TRANSACTION (DENGAN DEBUGGING LENGKAP) ===
+// === CREATE TRANSACTION (REVISED - EVENT-DRIVEN) ===
 export const createTransaction = async (req, res) => {
-  console.log("\n=== 🚀 START CREATE TRANSACTION ===");
+  console.log("\n=== 🚀 START CREATE TRANSACTION (EVENT-DRIVEN) ===");
 
   try {
     const userId = req.userId;
-    const { plan } = req.body;
+    const { plan, paymentMethod = 'qris' } = req.body;
 
-    console.log("📋 Request data:", { userId, plan });
+    console.log("📋 Request data:", { userId, plan, paymentMethod });
 
     // Validasi plan
     if (!planPrices[plan]) {
@@ -133,32 +134,18 @@ export const createTransaction = async (req, res) => {
 
     console.log("👤 User found:", user.email);
 
-    // Generate invoice number DENGAN ERROR HANDLING
+    // Generate invoice number yang UNIK
     let invoiceNumber;
     try {
       invoiceNumber = await generateInvoiceNumber();
-      console.log("🧾 Generated Invoice:", invoiceNumber);
-
-      // Cek duplikasi sebelum melanjutkan
-      const existingInvoice = await Transaction.findOne({
-        where: { invoice_number: invoiceNumber },
-      });
-
-      if (existingInvoice) {
-        console.log("⚠️ Invoice number already exists, generating new one...");
-        // Generate ulang dengan timestamp
-        const timestamp = Date.now();
-        const random = Math.floor(Math.random() * 1000000);
-        invoiceNumber = `INV/${timestamp}-${random}`;
-        console.log("🔄 New invoice number:", invoiceNumber);
-      }
-    } catch (invoiceError) {
-      console.error("❌ Error generating invoice:", invoiceError);
-      // Fallback invoice number
-      invoiceNumber = `INV-FALLBACK-${Date.now()}-${Math.floor(
-        Math.random() * 10000
-      )}`;
-      console.log("🔄 Using fallback invoice:", invoiceNumber);
+      console.log("✅ Generated invoice number:", invoiceNumber);
+    } catch (error) {
+      console.error("❌ Failed to generate invoice number:", error);
+      // Fallback ke emergency number jika gagal
+      const timestamp = Date.now();
+      const random = Math.floor(Math.random() * 1000000);
+      invoiceNumber = `INV/EMERGENCY/${timestamp}-${random}`;
+      console.log("⚠️ Using emergency invoice number:", invoiceNumber);
     }
 
     // Generate order ID yang UNIK
@@ -167,29 +154,15 @@ export const createTransaction = async (req, res) => {
     const orderId = `ORDER-${timestamp}-${random}`;
     console.log("🆔 Generated Order ID:", orderId);
 
-    // **PERIKSA ENVIRONMENT VARIABLE**
-    console.log("\n🔍 Checking environment variables:");
-    console.log("FRONTEND_URL:", process.env.FRONTEND_URL);
-    console.log("BACKEND_URL:", process.env.BACKEND_URL);
-    console.log("MIDTRANS_APP_URL:", process.env.MIDTRANS_APP_URL);
+    // Setup URLs untuk callback
+    const frontendUrl = process.env.FRONTEND_URL || "https://app.pipsdiary.com";
+    const successUrl = `${frontendUrl}/checkout-success?order_id=${orderId}&status=success`;
+    const pendingUrl = `${frontendUrl}/checkout-success?order_id=${orderId}&status=pending`;
+    const errorUrl = `${frontendUrl}/checkout-error?order_id=${orderId}&status=error`;
 
-    if (!process.env.MIDTRANS_SERVER_KEY) {
-      console.error("❌ MIDTRANS_SERVER_KEY is missing!");
-      return res.status(500).json({
-        success: false,
-        message: "Server configuration error: Midtrans key missing",
-      });
-    }
+    console.log("🔗 Callback URLs:", { successUrl, pendingUrl, errorUrl });
 
-    // Setup URLs
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    const successUrl = `${frontendUrl}/checkout/success?order_id=${orderId}`;
-    const pendingUrl = `${frontendUrl}/checkout/success?order_id=${orderId}`;
-    const errorUrl = `${frontendUrl}/checkout/error?order_id=${orderId}`;
-
-    console.log("🔗 URLs:", { successUrl, pendingUrl, errorUrl });
-
-    // **Parameter untuk Midtrans (SIMPLE VERSION)**
+    // Parameter untuk Midtrans
     const parameter = {
       transaction_details: {
         order_id: orderId,
@@ -208,39 +181,35 @@ export const createTransaction = async (req, res) => {
           name: `${plan.toUpperCase()} Plan Subscription`,
         },
       ],
-      // **CALLBACKS sangat penting!**
       callbacks: {
         finish: successUrl,
         pending: pendingUrl,
         error: errorUrl,
         notification: `${process.env.BACKEND_URL}/api/v1/transactions/notification`,
       },
+      expiry: {
+        unit: 'hours',
+        duration: 24,
+      },
     };
 
-    console.log("\n📦 Sending to Midtrans with parameters:");
-    console.log(JSON.stringify(parameter, null, 2));
+    console.log("\n📦 Sending to Midtrans...");
 
     let midtransResponse;
     try {
-      // **HIT API MIDTRANS LANGSUNG untuk debugging**
-      console.log("\n🌐 Making request to Midtrans API...");
-
-      // Option 1: Use midtransClient
       midtransResponse = await snap.createTransaction(parameter);
-
       console.log("✅ Midtrans response received!");
       console.log("Token:", midtransResponse.token ? "Present" : "MISSING");
       console.log("Redirect URL:", midtransResponse.redirect_url);
     } catch (error) {
-      console.error("\n❌ MIDTRANS API ERROR DETAILS:");
-      console.error("Error message:", error.message);
-      console.error("Error stack:", error.stack);
+      console.error("\n❌ MIDTRANS API ERROR:", error.message);
 
-      // Coba hit API langsung untuk debug
       try {
         const axios = (await import("axios")).default;
         const response = await axios.post(
-          "https://app.sandbox.midtrans.com/snap/v1/transactions",
+          process.env.MIDTRANS_IS_PRODUCTION === "true" 
+            ? "https://app.midtrans.com/snap/v1/transactions"
+            : "https://app.sandbox.midtrans.com/snap/v1/transactions",
           parameter,
           {
             headers: {
@@ -248,134 +217,90 @@ export const createTransaction = async (req, res) => {
               Accept: "application/json",
               Authorization:
                 "Basic " +
-                Buffer.from(process.env.MIDTRANS_SERVER_KEY + ":").toString(
-                  "base64"
-                ),
+                Buffer.from(process.env.MIDTRANS_SERVER_KEY + ":").toString("base64"),
             },
           }
         );
-        console.log("Direct API response:", response.data);
+        console.log("Direct API response success");
         midtransResponse = response.data;
       } catch (directError) {
-        console.error(
-          "Direct API also failed:",
-          directError.response?.data || directError.message
-        );
-
+        console.error("Direct API also failed:", directError.message);
         return res.status(500).json({
           success: false,
           message: "Gagal membuat transaksi di Midtrans",
           error: directError.message,
-          debug: {
-            serverKeyLength: process.env.MIDTRANS_SERVER_KEY?.length,
-            environment: process.env.NODE_ENV,
-            midtransUrl:
-              "https://app.sandbox.midtrans.com/snap/v1/transactions",
-          },
         });
       }
     }
 
-    // Validasi response
-    if (!midtransResponse || !midtransResponse.token) {
-      console.error("❌ Invalid Midtrans response:", midtransResponse);
-      return res.status(500).json({
-        success: false,
-        message: "Response tidak valid dari Midtrans",
-        data: midtransResponse,
-      });
-    }
+    // Simpan transaksi dengan invoice number
+    const transactionData = {
+      id: orderId,
+      invoice_number: invoiceNumber,
+      total: grossAmount,
+      status: "PENDING_PAYMENT",
+      customer_name: user.name,
+      customer_email: user.email,
+      snap_token: midtransResponse.token,
+      snap_redirect_url: midtransResponse.redirect_url,
+      user_id: userId,
+      plan: plan,
+      payment_method: paymentMethod,
+      is_visible: false,
+      metadata: {
+        created_via: 'checkout_page',
+        attempt_timestamp: new Date().toISOString(),
+        invoice_generated_at: new Date().toISOString(),
+      },
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
 
-    console.log("\n💾 Saving to database...");
-
-    // Simpan ke database dengan TRY-CATCH untuk handle duplicate
-    try {
-      const transactionData = {
-        id: orderId,
-        invoice_number: invoiceNumber,
-        total: grossAmount,
-        status: "PENDING_PAYMENT",
-        customer_name: user.name,
-        customer_email: user.email,
-        snap_token: midtransResponse.token,
-        snap_redirect_url: midtransResponse.redirect_url,
-        user_id: userId,
-        plan: plan,
-        created_at: new Date(),
-        updated_at: new Date(),
-      };
-
-      await Transaction.create(transactionData);
-      console.log("✅ Transaction saved to database");
-    } catch (dbError) {
-      console.error("❌ Database save error:", dbError);
-
-      // Jika error karena duplicate invoice number, generate baru dan coba lagi
-      if (dbError.name === "SequelizeUniqueConstraintError") {
-        console.log("🔄 Duplicate invoice detected, generating new one...");
-
-        // Generate invoice number baru
-        const timestamp = Date.now();
-        const random = Math.floor(Math.random() * 1000000);
-        const newInvoiceNumber = `INV/${timestamp}-${random}`;
-
-        // Update data dan save ulang
-        const transactionData = {
-          id: orderId,
-          invoice_number: newInvoiceNumber,
-          total: grossAmount,
-          status: "PENDING_PAYMENT",
-          customer_name: user.name,
-          customer_email: user.email,
-          snap_token: midtransResponse.token,
-          snap_redirect_url: midtransResponse.redirect_url,
-          user_id: userId,
-          plan: plan,
-          created_at: new Date(),
-          updated_at: new Date(),
-        };
-
-        await Transaction.create(transactionData);
-        console.log(
-          "✅ Transaction saved with new invoice number:",
-          newInvoiceNumber
-        );
-
-        invoiceNumber = newInvoiceNumber; // Update untuk response
-      } else {
-        throw dbError;
-      }
-    }
+    // Simpan ke database
+    await Transaction.create(transactionData);
+    console.log("✅ Transaction saved (hidden) to database");
+    console.log("📄 Invoice Number:", invoiceNumber);
 
     // Response untuk frontend
     const responseData = {
       success: true,
-      message: "Transaksi berhasil dibuat",
+      message: "Payment session created successfully",
       data: {
         token: midtransResponse.token,
         redirect_url: midtransResponse.redirect_url,
         orderId: orderId,
-        invoiceNumber: invoiceNumber,
+        invoice_number: invoiceNumber, // Kirim juga invoice number ke frontend
         amount: grossAmount,
         plan: plan,
+        expires_in: "24 hours",
+        note: "Transaction will only appear in history after payment attempt",
       },
     };
 
-    console.log("\n✅ Transaction created successfully!");
+    console.log("\n✅ Payment session created successfully!");
     console.log("Order ID:", orderId);
-    console.log("Redirect URL:", midtransResponse.redirect_url);
+    console.log("Invoice Number:", invoiceNumber);
     console.log("=== 🏁 END CREATE TRANSACTION ===\n");
+
+    // Di bagian akhir, sebelum return response
+    console.log("\n✅ Payment session created successfully!");
+    console.log("Order ID:", orderId);
+    console.log("Invoice Number:", invoiceNumber);
+    
+    // === TAMBAHKAN LOG INI ===
+    console.log("📡 Notification URL configured:", parameter.callbacks.notification);
+    console.log("⏳ Waiting for Midtrans notification...");
+    console.log("📝 Note: Notification will be sent by Midtrans when payment status changes");
+    console.log("=== 🏁 END CREATE TRANSACTION ===\n");
+    // === AKHIR LOG ===
 
     return res.json(responseData);
   } catch (error) {
     console.error("\n❌ CREATE TRANSACTION ERROR:", error);
-    console.error("Stack:", error.stack);
-
     return res.status(500).json({
       success: false,
       message: "Server error",
       error: error.message,
-      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }
 };
@@ -889,141 +814,150 @@ const updateUserSubscription = async (userId, transaction) => {
   }
 };
 
-// === HANDLE NOTIFICATION (UPDATED - WITH SIGNATURE VALIDATION) ===
+// === HANDLE NOTIFICATION (IMPROVED - EVENT-DRIVEN) ===
 export const handleNotification = async (req, res) => {
   try {
     const notification = req.body;
-    console.log(
-      "📩 Notification received:",
-      JSON.stringify(notification, null, 2)
-    );
+    console.log("📩 Notification received:", JSON.stringify(notification, null, 2));
 
-    // 1. VALIDASI SIGNATURE KEY [citation:1][citation:6]
+    // 1. VALIDASI SIGNATURE KEY
     const hash = crypto
       .createHash("sha512")
       .update(
         notification.order_id +
-          notification.status_code +
-          notification.gross_amount +
-          process.env.MIDTRANS_SERVER_KEY
+        notification.status_code +
+        notification.gross_amount +
+        process.env.MIDTRANS_SERVER_KEY
       )
       .digest("hex");
 
     if (notification.signature_key !== hash) {
       console.error("❌ Invalid signature key!");
-      // Kembalikan status 400 untuk menunjukkan request yang buruk, Midtrans akan coba ulang [citation:1]
       return res.status(400).json({
         success: false,
         message: "Invalid signature",
       });
     }
 
-    // 2. CEK STATUS CODE & FRAUD STATUS [citation:1]
-    // Status code harus 200 untuk transaksi sukses
-    if (notification.status_code !== "200") {
-      console.log(
-        `⚠️ Status code bukan 200: ${notification.status_code}. Transaksi mungkin gagal atau masih pending.`
-      );
-    }
-
-    // Untuk transaksi capture, fraud_status harus 'accept' [citation:1]
-    if (
-      notification.transaction_status === "capture" &&
-      notification.fraud_status !== "accept"
-    ) {
-      console.error(
-        `❌ Fraud status tidak diterima: ${notification.fraud_status}`
-      );
-      // Update status transaksi di database ke status yang sesuai (misal: DENIED)
-      await Transaction.update(
-        { status: "DENIED", updated_at: new Date() },
-        { where: { id: notification.order_id } }
-      );
-      return res
-        .status(200)
-        .json({ success: true, message: "Fraud denied handled" });
-    }
-
     const orderId = notification.order_id;
     const transactionStatus = notification.transaction_status;
+    const fraudStatus = notification.fraud_status;
 
-    console.log(
-      `🔍 Processing: ${orderId}, Status: ${transactionStatus}, Fraud: ${notification.fraud_status}`
-    );
+    console.log(`🔍 Processing: ${orderId}, Status: ${transactionStatus}, Fraud: ${fraudStatus}`);
 
-    // 3. CARI TRANSAKSI DAN UPDATE STATUS [citation:1]
-    const transaction = await Transaction.findOne({
+    // 2. CARI TRANSAKSI (atau buat baru jika belum ada)
+    let transaction = await Transaction.findOne({
       where: { id: orderId },
     });
 
+    let isNewTransaction = false;
+    
     if (!transaction) {
-      console.error("❌ Transaction not found in database:", orderId);
-      // Kembalikan 404, Midtrans akan coba ulang [citation:1]
-      return res
-        .status(404)
-        .json({ success: false, message: "Transaction not found" });
+      console.log("🆕 Transaction not found in database, creating new record...");
+      
+      // Buat transaksi baru dari data notification
+      transaction = await Transaction.create({
+        id: orderId,
+        invoice_number: null, // Akan di-generate nanti
+        total: parseInt(notification.gross_amount),
+        status: transactionStatus === 'settlement' || transactionStatus === 'capture' ? 'PAID' : 'PENDING_PAYMENT',
+        customer_name: notification.customer_name || 'Customer',
+        customer_email: notification.customer_email || 'customer@email.com',
+        snap_token: null,
+        snap_redirect_url: null,
+        user_id: parseInt(notification.custom_field1 || 0), // User ID dari custom field jika ada
+        plan: notification.item_details?.[0]?.id || 'pro',
+        payment_method: notification.payment_type,
+        midtrans_transaction_id: notification.transaction_id,
+        transaction_time: notification.transaction_time || notification.settlement_time,
+        is_visible: true, // Tampilkan di history karena ada aktivitas pembayaran
+        metadata: {
+          created_via: 'midtrans_notification',
+          notification_data: notification,
+        },
+        created_at: new Date(notification.transaction_time || Date.now()),
+        updated_at: new Date(),
+      });
+      
+      isNewTransaction = true;
+      console.log("✅ New transaction created from notification");
     }
 
-    // Hindari pembaruan status yang "mundur" (misal: settlement notif datang setelah cancel) [citation:1]
-    const statusPrecedence = {
-      PAID: 3,
-      PENDING_PAYMENT: 2,
-      CANCELED: 1,
-      EXPIRED: 1,
-      DENIED: 1,
-    };
-
+    // 3. UPDATE STATUS BERDASARKAN NOTIFIKASI
     let newStatus = transaction.status;
-    let isPaid = false;
+    let shouldUpdateSubscription = false;
 
-    // Tentukan status baru berdasarkan notifikasi
-    if (transactionStatus === "capture" || transactionStatus === "settlement") {
-      newStatus = "PAID";
-      isPaid = true;
-    } else if (transactionStatus === "pending") {
-      newStatus = "PENDING_PAYMENT";
-    } else if (["cancel", "deny", "expire"].includes(transactionStatus)) {
-      newStatus = "CANCELED";
+    // Mapping status Midtrans ke status internal
+    if (transactionStatus === 'capture') {
+      if (fraudStatus === 'challenge') {
+        newStatus = 'CHALLENGE';
+      } else if (fraudStatus === 'accept') {
+        newStatus = 'PAID';
+        shouldUpdateSubscription = true;
+      }
+    } else if (transactionStatus === 'settlement') {
+      newStatus = 'PAID';
+      shouldUpdateSubscription = true;
+    } else if (transactionStatus === 'pending') {
+      newStatus = 'PENDING_PAYMENT';
+      // Jadikan transaksi visible karena user sudah mencoba bayar
+      await transaction.update({ is_visible: true });
+    } else if (transactionStatus === 'deny') {
+      newStatus = 'DENIED';
+    } else if (transactionStatus === 'cancel' || transactionStatus === 'expire') {
+      newStatus = 'CANCELED';
+      // Transaksi yang dibatalkan tetap visible di history
+      await transaction.update({ is_visible: true });
+    } else if (transactionStatus === 'refund' || transactionStatus === 'partial_refund') {
+      newStatus = 'REFUNDED';
     }
 
-    // Jika status di database sudah lebih tinggi (misal sudah PAID), jangan update ke status lebih rendah
-    if (statusPrecedence[transaction.status] > statusPrecedence[newStatus]) {
-      console.log(
-        `⚠️ Ignoring delayed status update. Current: ${transaction.status}, Incoming: ${newStatus}`
-      );
-      return res
-        .status(200)
-        .json({ success: true, message: "Ignored delayed status" });
+    // 4. GENERATE INVOICE NUMBER JIKA SUDAH PAID
+    if (newStatus === 'PAID' && !transaction.invoice_number) {
+      const invoiceNumber = await generateInvoiceNumber();
+      await transaction.update({ invoice_number: invoiceNumber });
+      console.log(`📄 Generated invoice number: ${invoiceNumber}`);
     }
 
-    console.log(`🔄 Updating database: ${transaction.status} -> ${newStatus}`);
-
-    // Update transaksi di database
+    // 5. UPDATE TRANSAKSI
     await transaction.update({
       status: newStatus,
-      payment_method: notification.payment_type,
-      transaction_time:
-        notification.settlement_time ||
-        notification.transaction_time ||
-        new Date(),
-      midtrans_transaction_id: notification.transaction_id,
+      payment_method: notification.payment_type || transaction.payment_method,
+      transaction_time: notification.settlement_time || notification.transaction_time || new Date(),
+      midtrans_transaction_id: notification.transaction_id || transaction.midtrans_transaction_id,
+      is_visible: true, // Pastikan visible setelah ada update status
       updated_at: new Date(),
+      metadata: {
+        ...transaction.metadata,
+        last_notification: {
+          status: transactionStatus,
+          fraud_status: fraudStatus,
+          timestamp: new Date().toISOString(),
+        },
+      },
     });
 
-    // 4. UPDATE SUBSCRIPTION JIKA PEMBAYARAN BERHASIL
-    if (isPaid) {
-      console.log(
-        `💰 Payment successful, updating subscription for user: ${transaction.user_id}`
-      );
+    console.log(`🔄 Status updated: ${transactionStatus} -> ${newStatus}`);
+
+    // 6. UPDATE SUBSCRIPTION JIKA PEMBAYARAN BERHASIL
+    if (shouldUpdateSubscription && transaction.user_id) {
+      console.log(`💰 Payment successful, updating subscription for user: ${transaction.user_id}`);
       await updateUserSubscription(transaction.user_id, transaction);
     }
 
     console.log("✅ Notification processed successfully");
-    // Selalu kembalikan 2xx untuk menandakan notifikasi berhasil diterima [citation:1]
-    res.status(200).json({ success: true, message: "Notification processed" });
+    res.status(200).json({ 
+      success: true, 
+      message: "Notification processed",
+      data: {
+        order_id: orderId,
+        status: newStatus,
+        is_new_transaction: isNewTransaction,
+      }
+    });
+    
   } catch (error) {
     console.error("❌ Notification processing error:", error);
-    // Kembalikan 5xx untuk error server, Midtrans akan coba ulang [citation:1]
     res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -1156,6 +1090,7 @@ export const forceSyncTransaction = async (req, res) => {
 };
 
 // transactionController.js - tambahkan endpoint baru
+// transactionController.js - tambahkan/update fungsi cancelTransaction
 export const cancelTransaction = async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -1176,15 +1111,25 @@ export const cancelTransaction = async (req, res) => {
       });
     }
 
-    // Update status to canceled
+    // Update status to canceled dan buat visible
     await transaction.update({
       status: "CANCELED",
+      is_visible: true, // Tampilkan di riwayat
       updated_at: new Date(),
+      metadata: {
+        ...transaction.metadata,
+        canceled_by: 'user',
+        canceled_at: new Date().toISOString(),
+      },
     });
 
     res.json({
       success: true,
       message: "Transaction cancelled successfully",
+      data: {
+        orderId: transaction.id,
+        status: "CANCELED",
+      },
     });
   } catch (error) {
     console.error("Cancel transaction error:", error);
@@ -1195,19 +1140,41 @@ export const cancelTransaction = async (req, res) => {
   }
 };
 
-// === GET USER TRANSACTIONS ===
+// === GET USER TRANSACTIONS (VISIBLE ONLY) ===
 export const getUserTransactions = async (req, res) => {
   try {
     const userId = req.userId;
 
+    // Hanya ambil transaksi yang visible (is_visible = true)
     const transactions = await Transaction.findAll({
-      where: { user_id: userId },
+      where: { 
+        user_id: userId,
+        is_visible: true 
+      },
       order: [["created_at", "DESC"]],
+    });
+
+    // Juga ambil pending transactions yang belum visible untuk informasi
+    const pendingHiddenCount = await Transaction.count({
+      where: { 
+        user_id: userId,
+        is_visible: false,
+        status: 'PENDING_PAYMENT',
+        created_at: {
+          [Op.gte]: new Date(Date.now() - 24 * 60 * 60 * 1000) // 24 jam terakhir
+        }
+      }
     });
 
     res.json({
       success: true,
-      data: transactions,
+      data: {
+        transactions,
+        summary: {
+          total: transactions.length,
+          pending_hidden: pendingHiddenCount,
+        }
+      },
     });
   } catch (error) {
     console.error("Get transactions error:", error);
@@ -1217,6 +1184,118 @@ export const getUserTransactions = async (req, res) => {
     });
   }
 };
+
+// === CLEANUP OLD PENDING TRANSACTIONS (CRON JOB) ===
+export const cleanupOldPendingTransactions = async () => {
+  console.log("🧹 Cleaning up old pending transactions...");
+  
+  try {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    // Hapus transaksi pending yang lebih dari 24 jam dan belum visible
+    const result = await Transaction.destroy({
+      where: {
+        status: 'PENDING_PAYMENT',
+        is_visible: false,
+        created_at: {
+          [Op.lt]: twentyFourHoursAgo
+        }
+      }
+    });
+    
+    console.log(`✅ Cleaned up ${result} old pending transactions`);
+    
+    // Update transaksi pending > 24 jam menjadi expired
+    const expiredResult = await Transaction.update(
+      {
+        status: 'EXPIRED',
+        is_visible: true,
+        updated_at: new Date()
+      },
+      {
+        where: {
+          status: 'PENDING_PAYMENT',
+          is_visible: true,
+          created_at: {
+            [Op.lt]: twentyFourHoursAgo
+          }
+        }
+      }
+    );
+    
+    console.log(`✅ Expired ${expiredResult[0]} old transactions`);
+    
+  } catch (error) {
+    console.error("Cleanup error:", error);
+  }
+};
+
+export const getPendingTransaction = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const userId = req.userId;
+
+    console.log(`🔍 Getting pending transaction: ${orderId}`);
+
+    // Cari transaksi pending yang masih valid
+    const transaction = await Transaction.findOne({
+      where: {
+        id: orderId,
+        user_id: userId,
+        status: "PENDING_PAYMENT",
+        expires_at: {
+          [Op.gt]: new Date() // Masih valid (belum kadaluarsa)
+        }
+      },
+      attributes: [
+        "id", "snap_token", "plan", "status", 
+        "created_at", "expires_at", "total"
+      ],
+    });
+
+    if (!transaction) {
+      return res.status(404).json({
+        success: false,
+        message: "Transaksi tidak ditemukan atau sudah kadaluarsa",
+        code: "TRANSACTION_NOT_FOUND_OR_EXPIRED"
+      });
+    }
+
+    // Cek apakah token masih valid
+    const transactionAge = new Date() - new Date(transaction.created_at);
+    const hoursOld = transactionAge / (1000 * 60 * 60);
+
+    if (hoursOld > 24) {
+      return res.status(400).json({
+        success: false,
+        message: "Token pembayaran sudah kadaluarsa",
+        code: "TOKEN_EXPIRED",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        token: transaction.snap_token,
+        orderId: transaction.id,
+        plan: transaction.plan,
+        status: transaction.status,
+        amount: transaction.total,
+        expires_at: transaction.expires_at,
+        expiresIn: `${Math.ceil(24 - hoursOld)} jam`,
+        can_continue: true
+      },
+    });
+  } catch (error) {
+    console.error("Get pending transaction error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
 
 // Fungsi untuk format currency
 const formatCurrency = (amount) => {
@@ -1968,6 +2047,294 @@ export const generateInvoice = async (req, res) => {
       success: false,
       message: "Gagal menghasilkan invoice",
       error: error.message,
+    });
+  }
+};
+
+
+// Get transaction untuk admin
+// Get all transactions with pagination and filtering
+export const getAllTransactions = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      search = '',
+      status,
+      startDate,
+      endDate,
+      customer_name,
+      customer_email,
+      plan,
+      payment_method
+    } = req.query;
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const userId = req.userId;
+
+    // Build where clause
+    let whereClause = {};
+
+    // Admin can see all, non-admin only sees their own
+    if (req.role !== 'admin' && req.role !== 'super_admin') {
+      whereClause.user_id = userId;
+    }
+
+    // Search across multiple fields
+    if (search) {
+      whereClause[Op.or] = [
+        { invoice_number: { [Op.like]: `%${search}%` } },
+        { customer_name: { [Op.like]: `%${search}%` } },
+        { customer_email: { [Op.like]: `%${search}%` } },
+        { midtrans_transaction_id: { [Op.like]: `%${search}%` } },
+        { id: { [Op.like]: `%${search}%` } }
+      ];
+    }
+
+    // Filter by status
+    if (status && status !== 'all') {
+      whereClause.status = status;
+    }
+
+    // Filter by plan
+    if (plan && plan !== 'all') {
+      whereClause.plan = plan;
+    }
+
+    // Filter by payment method
+    if (payment_method && payment_method !== 'all') {
+      whereClause.payment_method = payment_method;
+    }
+
+    // Filter by customer name
+    if (customer_name) {
+      whereClause.customer_name = { [Op.like]: `%${customer_name}%` };
+    }
+
+    // Filter by customer email
+    if (customer_email) {
+      whereClause.customer_email = { [Op.like]: `%${customer_email}%` };
+    }
+
+    // Date range filter
+    if (startDate || endDate) {
+      whereClause.created_at = {};
+      if (startDate) {
+        whereClause.created_at[Op.gte] = new Date(startDate);
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        whereClause.created_at[Op.lte] = end;
+      }
+    }
+
+    // Get total count
+    const totalCount = await Transaction.count({
+      where: whereClause
+    });
+
+    // Get paginated data with user info
+    const transactions = await Transaction.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: 'User',
+          attributes: ['id', 'name', 'email', 'role_id']
+        }
+      ],
+      order: [['created_at', 'DESC']],
+      limit: parseInt(limit),
+      offset: offset
+    });
+
+    // Format response
+    const formattedTransactions = transactions.map(transaction => ({
+      id: transaction.id,
+      invoice_number: transaction.invoice_number,
+      total: transaction.total,
+      status: transaction.status,
+      customer_name: transaction.customer_name,
+      customer_email: transaction.customer_email,
+      plan: transaction.plan,
+      payment_method: transaction.payment_method,
+      user_id: transaction.user_id,
+      user: transaction.User ? {
+        id: transaction.User.id,
+        name: transaction.User.name,
+        email: transaction.User.email,
+        role: transaction.User.role_id
+      } : null,
+      created_at: transaction.created_at,
+      transaction_time: transaction.transaction_time,
+      metadata: transaction.metadata || {},
+      // Format total as currency
+      formatted_total: new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        minimumFractionDigits: 0
+      }).format(transaction.total)
+    }));
+
+    // Get status statistics
+    const statusStats = await Transaction.findAll({
+      attributes: [
+        'status',
+        [db.fn('COUNT', db.col('id')), 'count']
+      ],
+      where: req.role !== 'admin' && req.role !== 'super_admin' ? { user_id: userId } : {},
+      group: ['status']
+    });
+
+    // Get plan statistics
+    const planStats = await Transaction.findAll({
+      attributes: [
+        'plan',
+        [db.fn('COUNT', db.col('id')), 'count'],
+        [db.fn('SUM', db.col('total')), 'total_amount']
+      ],
+      where: req.role !== 'admin' && req.role !== 'super_admin' ? { user_id: userId } : {},
+      group: ['plan']
+    });
+
+    res.json({
+      success: true,
+      data: formattedTransactions,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalCount / limit),
+        totalItems: totalCount,
+        itemsPerPage: parseInt(limit)
+      },
+      statistics: {
+        status: statusStats.reduce((acc, stat) => {
+          acc[stat.status] = parseInt(stat.get('count'));
+          return acc;
+        }, {}),
+        plans: planStats.map(stat => ({
+          plan: stat.plan,
+          count: parseInt(stat.get('count')),
+          total_amount: parseInt(stat.get('total_amount') || 0)
+        })),
+        total_revenue: planStats.reduce((sum, stat) => sum + parseInt(stat.get('total_amount') || 0), 0)
+      },
+      filters: {
+        available_statuses: ['PENDING_PAYMENT', 'PAID', 'CANCELED', 'EXPIRED', 'DENIED'],
+        available_plans: ['free', 'pro', 'lifetime'],
+        available_payment_methods: ['bank_transfer', 'credit_card', 'gopay', 'shopeepay', 'qris']
+      }
+    });
+
+  } catch (error) {
+    console.error('Get all transactions error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error: ' + error.message
+    });
+  }
+};
+
+// Get transaction statistics summary
+export const getTransactionStatistics = async (req, res) => {
+  try {
+    const { period = 'month', year = new Date().getFullYear() } = req.query;
+    const userId = req.userId;
+
+    let whereClause = {};
+    if (req.role !== 'admin' && req.role !== 'super_admin') {
+      whereClause.user_id = userId;
+    }
+
+    // Get current period stats
+    const currentPeriod = new Date();
+    let startDate, endDate;
+
+    if (period === 'day') {
+      startDate = new Date(currentPeriod.setHours(0, 0, 0, 0));
+      endDate = new Date(currentPeriod.setHours(23, 59, 59, 999));
+    } else if (period === 'week') {
+      const day = currentPeriod.getDay();
+      const diff = currentPeriod.getDate() - day + (day === 0 ? -6 : 1);
+      startDate = new Date(currentPeriod.setDate(diff));
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + 6);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (period === 'month') {
+      startDate = new Date(currentPeriod.getFullYear(), currentPeriod.getMonth(), 1);
+      endDate = new Date(currentPeriod.getFullYear(), currentPeriod.getMonth() + 1, 0);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (period === 'year') {
+      startDate = new Date(year, 0, 1);
+      endDate = new Date(year, 11, 31);
+      endDate.setHours(23, 59, 59, 999);
+    }
+
+    whereClause.created_at = {
+      [Op.gte]: startDate,
+      [Op.lte]: endDate
+    };
+
+    const stats = await Transaction.findAll({
+      attributes: [
+        [db.fn('COUNT', db.col('id')), 'total_transactions'],
+        [db.fn('SUM', db.col('total')), 'total_revenue'],
+        [db.fn('SUM', db.literal('CASE WHEN status = "PAID" THEN total ELSE 0 END')), 'paid_revenue'],
+        [db.fn('COUNT', db.literal('CASE WHEN status = "PAID" THEN 1 END')), 'paid_count'],
+        [db.fn('COUNT', db.literal('CASE WHEN status = "PENDING_PAYMENT" THEN 1 END')), 'pending_count'],
+        [db.fn('COUNT', db.literal('CASE WHEN status = "CANCELED" THEN 1 END')), 'canceled_count']
+      ],
+      where: whereClause
+    });
+
+    // Get monthly revenue for chart
+    const monthlyRevenue = await Transaction.findAll({
+      attributes: [
+        [db.fn('MONTH', db.col('created_at')), 'month'],
+        [db.fn('SUM', db.col('total')), 'revenue'],
+        [db.fn('COUNT', db.col('id')), 'count']
+      ],
+      where: {
+        ...whereClause,
+        status: 'PAID'
+      },
+      group: [db.fn('MONTH', db.col('created_at'))],
+      order: [[db.fn('MONTH', db.col('created_at')), 'ASC']]
+    });
+
+    res.json({
+      success: true,
+      data: {
+        summary: stats[0] ? {
+          total_transactions: parseInt(stats[0].get('total_transactions')) || 0,
+          total_revenue: parseInt(stats[0].get('total_revenue')) || 0,
+          paid_revenue: parseInt(stats[0].get('paid_revenue')) || 0,
+          paid_count: parseInt(stats[0].get('paid_count')) || 0,
+          pending_count: parseInt(stats[0].get('pending_count')) || 0,
+          canceled_count: parseInt(stats[0].get('canceled_count')) || 0,
+          conversion_rate: stats[0].get('total_transactions') > 0 
+            ? ((parseInt(stats[0].get('paid_count')) / parseInt(stats[0].get('total_transactions'))) * 100).toFixed(2)
+            : 0
+        } : {},
+        monthly_revenue: monthlyRevenue.map(item => ({
+          month: item.get('month'),
+          revenue: parseInt(item.get('revenue')) || 0,
+          count: parseInt(item.get('count')) || 0
+        })),
+        period: {
+          type: period,
+          start: startDate,
+          end: endDate
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Get transaction statistics error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error: ' + error.message
     });
   }
 };

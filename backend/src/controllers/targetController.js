@@ -33,7 +33,7 @@ export const getTarget = async (req, res) => {
     console.error('Get target error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: 'Server error',
     });
   }
 };

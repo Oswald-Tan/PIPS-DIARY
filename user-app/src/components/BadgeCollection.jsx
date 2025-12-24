@@ -28,6 +28,33 @@ const BadgeCollection = () => {
     dispatch(getAllBadges());
   }, [dispatch]);
 
+  // DEBUG: Log data badges saat berubah
+  useEffect(() => {
+    if (badges.length > 0) {
+      console.log("=== BADGES DATA DEBUG ===");
+      console.log("Total badges:", badges.length);
+      
+      // Log semua badges untuk debugging
+      badges.forEach(badge => {
+        console.log(`Badge ${badge.id} - ${badge.name}:`, {
+          progress: badge.progress,
+          requirementValue: badge.requirementValue,
+          typeOfValue: typeof badge.requirementValue,
+          achieved: badge.achieved,
+          requirement: badge.requirement,
+        });
+      });
+
+      // Cek badge dengan ID 30 (Disciplined Trader)
+      const badge30 = badges.find(b => b.id === 30);
+      if (badge30) {
+        console.log("=== DETAIL BADGE 30 ===");
+        console.log("Full object:", badge30);
+        console.log("Should show progress:", !badge30.achieved && badge30.progress > 0);
+      }
+    }
+  }, [badges]);
+
   const getBadgeIcon = (iconName, color) => {
     const iconProps = { className: "w-6 h-6", color };
 
@@ -93,28 +120,66 @@ const BadgeCollection = () => {
     }
   };
 
-  // Tambahkan fungsi helper di bagian atas komponen
-const getRequirementValue = (badge) => {
-  // Coba beberapa cara untuk mendapatkan nilai requirement
-  if (badge.requirementValue !== undefined) return badge.requirementValue;
-  
-  if (badge.requirement && typeof badge.requirement === 'object') {
-    return badge.requirement.value || 0;
-  }
-  
-  if (typeof badge.requirement === 'string') {
-    try {
-      const parsed = JSON.parse(badge.requirement);
-      return parsed.value || 0;
-    } catch (error) {
-      console.log('Failed to parse requirement:', error);
-      console.warn('Failed to parse requirement:', badge.requirement);
+  // **FIXED FUNCTION: Ambil requirement value dengan cara yang robust**
+  const getRequirementValue = (badge) => {
+    // Priority 1: Langsung dari requirementValue jika valid
+    if (badge.requirementValue !== undefined && badge.requirementValue !== null) {
+      const num = Number(badge.requirementValue);
+      if (!isNaN(num)) {
+        return num;
+      }
     }
-  }
-  
-  return 0; // Fallback
-};
+    
+    // Priority 2: Jika requirementValue adalah string JSON (backward compatibility)
+    if (typeof badge.requirementValue === 'string') {
+      // Coba parse sebagai JSON
+      if (badge.requirementValue.includes('{')) {
+        try {
+          const parsed = JSON.parse(badge.requirementValue);
+          const val = Number(parsed.value);
+          if (!isNaN(val)) return val;
+        } catch (error) {
+          console.warn(`Failed to parse requirementValue JSON for badge ${badge.id}:`, error);
+        }
+      }
+      // Coba parse sebagai angka biasa
+      const num = Number(badge.requirementValue);
+      if (!isNaN(num)) return num;
+    }
+    
+    // Priority 3: Dari requirement object
+    if (badge.requirement && typeof badge.requirement === 'object') {
+      const val = Number(badge.requirement.value);
+      if (!isNaN(val)) return val;
+    }
+    
+    // Priority 4: Dari requirement string
+    if (typeof badge.requirement === 'string') {
+      try {
+        const parsed = JSON.parse(badge.requirement);
+        const val = Number(parsed.value);
+        if (!isNaN(val)) return val;
+      } catch (error) {
+        console.warn(`Failed to parse requirement JSON for badge ${badge.id}:`, error);
+        // Coba extract dengan regex
+        const match = badge.requirement.match(/"value":\s*(\d+)/);
+        if (match) {
+          return Number(match[1]);
+        }
+      }
+    }
+    
+    // Priority 5: Fallback dari nama badge
+    const name = badge.name || '';
+    const numberMatch = name.match(/\d+/);
+    if (numberMatch) {
+      return parseInt(numberMatch[0], 10);
+    }
+    
+    return 0; // Fallback default
+  };
 
+  // **FIXED: Filter badges dengan benar**
   const filteredBadges = badges.filter((badge) => {
     if (activeFilter === "all") return true;
     return badge.type === activeFilter;
@@ -139,7 +204,7 @@ const getRequirementValue = (badge) => {
 
   return (
     <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-200">
-      {/* Header - Diubah struktur */}
+      {/* Header */}
       <div className="mb-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
           <div>
@@ -152,7 +217,6 @@ const getRequirementValue = (badge) => {
             </p>
           </div>
 
-          {/* Info Progress di samping untuk desktop */}
           <div className="hidden lg:block text-right">
             <div className="text-sm text-slate-600 mb-1">
               {Math.round((achievedBadges.length / badges.length) * 100)}%
@@ -161,7 +225,7 @@ const getRequirementValue = (badge) => {
           </div>
         </div>
 
-        {/* Progress Bar - Full width di mobile */}
+        {/* Progress Bar */}
         <div className="w-full">
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm font-medium text-slate-700">Progress</span>
@@ -179,7 +243,6 @@ const getRequirementValue = (badge) => {
               className="h-3 rounded-full bg-linear-to-r from-violet-600 to-purple-600"
             />
           </div>
-          {/* Info persentase untuk desktop sudah ada di atas */}
         </div>
       </div>
 
@@ -206,106 +269,135 @@ const getRequirementValue = (badge) => {
 
       {/* Badges Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {filteredBadges.map((badge) => (
-          <Motion.div
-            key={badge.id}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            whileHover={{ scale: 1.05, y: -5 }}
-            className={`relative rounded-2xl p-4 border-2 transition-all duration-300 ${
-              badge.achieved
-                ? getRarityColor(badge.rarity)
-                : "border-slate-200 bg-slate-100 opacity-60"
-            }`}
-          >
-            {/* Badge Icon */}
-            <div className="flex justify-center mb-3">
-              <div
-                className={`p-3 rounded-2xl ${
-                  badge.achieved ? "bg-white" : "bg-slate-200"
-                }`}
-              >
-                {getBadgeIcon(
-                  badge.icon,
-                  badge.achieved ? badge.color : "#9ca3af"
-                )}
-              </div>
-            </div>
+        {filteredBadges.map((badge) => {
+          // **FIXED: Hitung requirement value sekali untuk konsistensi**
+          const requirementValue = getRequirementValue(badge);
+          const progress = badge.progress || 0;
+          const isAchieved = badge.achieved || false;
+          const shouldShowProgress = progress > 0 && progress < requirementValue;
+          
+          // Debug log untuk badge tertentu
+          if (badge.id === 30) {
+            console.log(`Rendering Badge ${badge.id}:`, {
+              progress,
+              requirementValue,
+              isAchieved,
+              shouldShowProgress,
+              rawValue: badge.requirementValue,
+              rawType: typeof badge.requirementValue
+            });
+          }
 
-            {/* Badge Info */}
-            <div className="text-center">
-              <h4
-                className={`font-bold text-sm mb-1 ${
-                  badge.achieved ? "text-slate-800" : "text-slate-500"
-                }`}
-              >
-                {badge.name}
-              </h4>
-              <p className="text-xs text-slate-600 mb-2 line-clamp-2">
-                {badge.description}
-              </p>
-
-              {/* Progress */}
-              {!badge.achieved && badge.progress > 0 && (
-                <div className="mb-2">
-                  <div className="w-full bg-slate-300 rounded-full h-1.5">
-                    <div
-                      className="h-1.5 rounded-full bg-violet-500"
-                      style={{
-                        width: `${Math.min(
-                          100,
-                          (badge.progress / getRequirementValue(badge)) * 100
-                        )}%`,
-                      }}
-                    />
-                  </div>
-                  <div className="text-xs text-slate-500 mt-1">
-                    {badge.progress}/{getRequirementValue(badge)}
-                  </div>
-                </div>
-              )}
-
-              {/* Type Tag */}
-              <span
-                className={`inline-block px-2 py-1 rounded-full text-xs font-medium capitalize ${getTypeColor(
-                  badge.type
-                )}`}
-              >
-                {badge.type}
-              </span>
-
-              {/* Rarity Tag */}
-              <div className="mt-2">
-                <span
-                  className={`inline-block px-2 py-1 rounded-full text-xs font-medium border ${
-                    badge.achieved
-                      ? badge.rarity === "common"
-                        ? "text-slate-700 bg-slate-200 border-slate-300"
-                        : badge.rarity === "rare"
-                        ? "text-blue-700 bg-blue-200 border-blue-300"
-                        : badge.rarity === "epic"
-                        ? "text-purple-700 bg-purple-200 border-purple-300"
-                        : "text-yellow-700 bg-yellow-200 border-yellow-300"
-                      : "text-slate-500 bg-slate-100 border-slate-200"
+          return (
+            <Motion.div
+              key={badge.id}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              whileHover={{ scale: 1.05, y: -5 }}
+              className={`relative rounded-2xl p-4 border-2 transition-all duration-300 ${
+                isAchieved
+                  ? getRarityColor(badge.rarity)
+                  : "border-slate-200 bg-slate-100 opacity-60"
+              }`}
+            >
+              {/* Badge Icon */}
+              <div className="flex justify-center mb-3">
+                <div
+                  className={`p-3 rounded-2xl ${
+                    isAchieved ? "bg-white" : "bg-slate-200"
                   }`}
                 >
-                  {badge.rarity}
-                </span>
+                  {getBadgeIcon(
+                    badge.icon,
+                    isAchieved ? badge.color : "#9ca3af"
+                  )}
+                </div>
               </div>
 
-              {/* Achievement Status */}
-              {badge.achieved ? (
-                <div className="absolute top-2 right-2">
-                  <CheckCircle className="w-5 h-5 text-green-500" />
+              {/* Badge Info */}
+              <div className="text-center">
+                <h4
+                  className={`font-bold text-sm mb-1 ${
+                    isAchieved ? "text-slate-800" : "text-slate-500"
+                  }`}
+                >
+                  {badge.name}
+                </h4>
+                <p className="text-xs text-slate-600 mb-2 line-clamp-2">
+                  {badge.description}
+                </p>
+
+                {/* **FIXED: Progress Section - Tampilkan untuk semua yang memiliki progress */}
+                {shouldShowProgress && (
+                  <div className="mb-2">
+                    <div className="w-full bg-slate-300 rounded-full h-1.5">
+                      <div
+                        className="h-1.5 rounded-full bg-violet-500"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            (progress / requirementValue) * 100
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {progress}/{requirementValue}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tampilkan juga jika sudah achieved tapi ingin show progress */}
+                {isAchieved && progress > 0 && !shouldShowProgress && (
+                  <div className="mb-2">
+                    <div className="text-xs text-green-600 font-medium">
+                      ✓ Achieved ({progress}/{requirementValue})
+                    </div>
+                  </div>
+                )}
+
+                {/* Type Tag */}
+                <span
+                  className={`inline-block px-2 py-1 rounded-full text-xs font-medium capitalize ${getTypeColor(
+                    badge.type
+                  )}`}
+                >
+                  {badge.type}
+                </span>
+
+                {/* Rarity Tag */}
+                <div className="mt-2">
+                  <span
+                    className={`inline-block px-2 py-1 rounded-full text-xs font-medium border ${
+                      isAchieved
+                        ? badge.rarity === "common"
+                          ? "text-slate-700 bg-slate-200 border-slate-300"
+                          : badge.rarity === "rare"
+                          ? "text-blue-700 bg-blue-200 border-blue-300"
+                          : badge.rarity === "epic"
+                          ? "text-purple-700 bg-purple-200 border-purple-300"
+                          : "text-yellow-700 bg-yellow-200 border-yellow-300"
+                        : "text-slate-500 bg-slate-100 border-slate-200"
+                    }`}
+                  >
+                    {badge.rarity}
+                  </span>
                 </div>
-              ) : (
-                <div className="absolute top-2 right-2">
-                  <Lock className="w-5 h-5 text-slate-400" />
-                </div>
-              )}
-            </div>
-          </Motion.div>
-        ))}
+
+                {/* Achievement Status */}
+                {isAchieved ? (
+                  <div className="absolute top-2 right-2">
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                  </div>
+                ) : (
+                  <div className="absolute top-2 right-2">
+                    <Lock className="w-5 h-5 text-slate-400" />
+                  </div>
+                )}
+              </div>
+            </Motion.div>
+          );
+        })}
       </div>
 
       {/* Empty State */}

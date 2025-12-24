@@ -58,7 +58,7 @@ const Layout = () => {
     try {
       const response = await axios.get(`${API_URL}/transactions/user`);
       if (response.data.success) {
-        setTransactions(response.data.data);
+        setTransactions(response.data.data.transactions || []);
       }
     } catch (error) {
       console.error("Error fetching transactions:", error);
@@ -714,7 +714,7 @@ const Layout = () => {
                         <button
                           onClick={() =>
                             navigate(
-                              `/checkout/success?order_id=${transaction.id}`
+                              `/checkout-success?order_id=${transaction.id}`
                             )
                           }
                           className="px-3 py-1.5 text-xs md:text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors flex-1 md:flex-none"

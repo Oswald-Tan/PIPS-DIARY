@@ -10,9 +10,11 @@ import {
   syncFromDashboard,
   autoFixPastTransactions,
   cancelTransaction,
-  getTransactionToken
+  getTransactionToken,
+  getAllTransactions,
+  getTransactionStatistics
 } from "../controllers/transactionController.js";
-import { verifyUser } from "../middleware/authUser.js";
+import { verifyUser, adminOnly } from "../middleware/authUser.js";
 import { validateTransactionStatus } from "../middleware/transactionValidation.js";
 
 const router = express.Router();
@@ -28,5 +30,8 @@ router.get('/invoice-pdf/:orderId', verifyUser, generateInvoice);
 router.post("/notification", handleNotification);
 router.post('/sync-dashboard/:orderId', verifyUser, syncFromDashboard);
 router.post('/auto-fix', autoFixPastTransactions);
+
+router.get("/", verifyUser, adminOnly, getAllTransactions);
+router.get("/statistics", verifyUser, adminOnly, getTransactionStatistics);
 
 export default router;

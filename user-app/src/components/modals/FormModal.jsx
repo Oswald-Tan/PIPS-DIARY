@@ -1013,7 +1013,7 @@ const FormModal = ({
                       ? "border-red-500 bg-red-50"
                       : "border-slate-200 focus:border-violet-500"
                   }`}
-                  placeholder="1.5"
+                  placeholder="1.3"
                 />
                 {validationErrors.riskReward && (
                   <div className="mt-1 flex items-center gap-1">
