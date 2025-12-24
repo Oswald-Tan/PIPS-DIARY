@@ -677,9 +677,6 @@ const TableRatesView = ({
                           </span>
                         </div>
                       </div>
-                      <div className="text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded-full">
-                        IDR → USD
-                      </div>
                     </div>
                   </td>
                   <td className="p-4 whitespace-nowrap">
@@ -692,7 +689,7 @@ const TableRatesView = ({
                         )}
                       </div>
                       <div className="text-xs text-slate-600 font-light">
-                        {rate.source === "manual" ? "📝 Manual" : "🔄 API"}
+                        {rate.source === "manual" ? "Manual" : "API"}
                       </div>
                     </div>
                   </td>
@@ -1638,7 +1635,7 @@ const Layout = () => {
                 svg
               />
               <span className="text-sm font-bold text-violet-700">
-                IDR (Indonesian Rupiah)
+                IDR
               </span>
             </div>
             <ArrowRight className="w-4 h-4 text-slate-400" />
@@ -1649,7 +1646,7 @@ const Layout = () => {
                 svg
               />
               <span className="text-sm font-bold text-emerald-700">
-                USD (US Dollar)
+                USD
               </span>
             </div>
           </div>

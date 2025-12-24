@@ -6,6 +6,7 @@ import Subscription from "../models/subscription.js";
 import Transaction from "../models/transaction.js";
 import { PeriodLeaderboard } from "../models/gamification.js";
 import ExchangeRate from "../models/exchangeRate.js";
+import Role from "../models/role.js";
 
 // Get comprehensive dashboard stats for super admin
 export const getDashboardStats = async (req, res) => {
@@ -34,31 +35,32 @@ export const getDashboardStats = async (req, res) => {
     // Total users by role
     const usersByRole = await User.findAll({
       attributes: [
-        "role_id",
-        [db.fn("COUNT", db.col("id")), "count"],
+        [db.col("userRole.role_name"), "role"],
+        [db.fn("COUNT", db.col("User.id")), "count"],
         [
           db.fn(
             "SUM",
-            db.cast(db.where(db.col("status"), "active"), "integer")
+            db.cast(db.where(db.col("User.status"), "active"), "integer")
           ),
           "active",
         ],
       ],
-      group: ["role_id"],
+      include: [
+        {
+          model: Role,
+          as: "userRole",
+          attributes: [],
+          required: true,
+        },
+      ],
+      group: ["userRole.role_name"],
+      order: [[db.fn("COUNT", db.col("User.id")), "DESC"]],
       raw: true,
     });
 
-    // Map role_id to role names
-    const roleMap = {
-      1: "super_admin",
-      2: "admin",
-      3: "premium_user",
-      4: "user",
-      5: "viewer",
-    };
-
+    // Format hasil query ke formattedUsersByRole
     const formattedUsersByRole = usersByRole.map((item) => ({
-      role: roleMap[item.role_id] || `role_${item.role_id}`,
+      role: item.role,
       total: parseInt(item.count),
       active: parseInt(item.active) || 0,
       inactive: parseInt(item.count) - (parseInt(item.active) || 0),

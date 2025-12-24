@@ -38,8 +38,8 @@ const Layout = () => {
 
       if (statsRes.data.success) {
         setStats({
-          ...statsRes.data.data, // Data statistik
-          timestamp: statsRes.data.timestamp, // Tambah timestamp
+          ...statsRes.data.data,
+          timestamp: statsRes.data.timestamp,
         });
       }
       if (metricsRes.data.success) setMetrics(metricsRes.data.data);
@@ -79,16 +79,8 @@ const Layout = () => {
     },
   };
 
-  // StatCard Component dengan design baru
-  const StatCard = ({
-    title,
-    value,
-    icon,
-    color,
-    subtitle,
-    trend,
-    loading,
-  }) => {
+  // StatCard Component
+  const StatCard = ({ title, value, icon, color, subtitle, trend }) => {
     const getColorClass = (color) => {
       const colors = {
         violet:
@@ -102,23 +94,6 @@ const Layout = () => {
       };
       return colors[color] || colors.violet;
     };
-
-    if (loading) {
-      return (
-        <div
-          className={`bg-linear-to-br ${getColorClass(
-            color
-          )} backdrop-blur-sm p-6 rounded-3xl shadow-sm border animate-pulse`}
-        >
-          <div className="flex justify-between items-center mb-4">
-            <div className="h-4 bg-slate-300 rounded w-24"></div>
-            <div className="h-6 w-6 bg-slate-300 rounded-full"></div>
-          </div>
-          <div className="h-8 bg-slate-300 rounded w-32 mb-2"></div>
-          <div className="h-3 bg-slate-300 rounded w-20"></div>
-        </div>
-      );
-    }
 
     return (
       <div
@@ -170,30 +145,12 @@ const Layout = () => {
   // Loading State
   if (loading) {
     return (
-      <div className="min-h-screen bg-linear-to-br from-slate-50 to-white p-6">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <div className="h-8 bg-slate-300 rounded w-48 mb-2"></div>
-            <div className="h-4 bg-slate-300 rounded w-32"></div>
-          </div>
-          <div className="h-10 w-10 bg-slate-300 rounded-full"></div>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {[...Array(4)].map((_, i) => (
-            <StatCard key={i} loading={true} />
-          ))}
-        </div>
-
-        <div className="h-64 bg-slate-300 rounded-3xl mb-6 animate-pulse"></div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {[...Array(2)].map((_, i) => (
-            <div
-              key={i}
-              className="h-96 bg-slate-300 rounded-3xl animate-pulse"
-            ></div>
-          ))}
+      <div className="min-h-screen bg-linear-to-br from-slate-50 to-white flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="w-10 h-10 text-violet-600 animate-spin mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-slate-800">
+            Loading dashboard...
+          </h3>
         </div>
       </div>
     );
@@ -683,11 +640,18 @@ const Layout = () => {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1 }}
                     whileHover={{ x: 5 }}
-                    className="flex items-center justify-between p-4 bg-linear-to-r from-slate-50 to-white rounded-2xl border border-slate-200 hover:shadow-sm transition-all"
+                    className="
+          flex flex-col gap-4
+          sm:flex-row sm:items-center sm:justify-between
+          p-4 bg-linear-to-r from-slate-50 to-white
+          rounded-2xl border border-slate-200
+          hover:shadow-sm transition-all
+        "
                   >
-                    <div className="flex items-center gap-4">
+                    {/* LEFT */}
+                    <div className="flex items-center gap-3 sm:gap-4">
                       <div
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center ${
                           index === 0
                             ? "bg-amber-100 text-amber-600"
                             : index === 1
@@ -698,24 +662,28 @@ const Layout = () => {
                         }`}
                       >
                         {index < 3 ? (
-                          <span className="font-bold text-lg">
+                          <span className="font-bold text-base sm:text-lg">
                             #{index + 1}
                           </span>
                         ) : (
-                          <Users className="w-5 h-5" />
+                          <Users className="w-4 h-4 sm:w-5 sm:h-5" />
                         )}
                       </div>
-                      <div>
-                        <h4 className="font-bold text-slate-800">
+
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-slate-800 truncate">
                           {user.name}
                         </h4>
-                        <p className="text-sm text-slate-600">{user.email}</p>
+                        <p className="text-sm text-slate-600 truncate">
+                          {user.email}
+                        </p>
                       </div>
                     </div>
 
-                    <div className="text-right">
+                    {/* RIGHT */}
+                    <div className="flex justify-between items-center sm:block sm:text-right">
                       <div
-                        className={`text-lg font-bold ${
+                        className={`text-base sm:text-lg font-bold ${
                           user.totalProfitUSD >= 0
                             ? "text-emerald-600"
                             : "text-rose-600"
@@ -723,9 +691,10 @@ const Layout = () => {
                       >
                         ${user.totalProfitUSD?.toFixed(2) || "0.00"}
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
+
+                      <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-600 sm:justify-end">
                         <span>{user.totalTrades} trades</span>
-                        <span className="text-xs">•</span>
+                        <span className="hidden sm:inline text-xs">•</span>
                         <span>{user.avgWinRate?.toFixed(1) || "0"}% win</span>
                       </div>
                     </div>
@@ -853,7 +822,7 @@ const Layout = () => {
       <Motion.div
         variants={itemVariants}
         whileHover={{ scale: 1.01 }}
-        className="bg-linear-to-r from-violet-600 via-purple-600 to-pink-600 rounded-3xl p-6 shadow-2xl border-2 border-violet-300"
+        className="bg-linear-to-r from-violet-600 via-purple-600 to-pink-600 rounded-3xl p-6 shadow-md border-2 border-violet-300"
       >
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between text-white gap-6">
           <div className="flex items-start gap-4">
@@ -901,13 +870,6 @@ const Layout = () => {
         <div className="flex flex-col md:flex-row justify-between items-center text-sm text-slate-500">
           <div className="flex items-center gap-4">
             <span>Super Admin Dashboard v2.0</span>
-            <span className="hidden md:inline">•</span>
-            <span>
-              Last updated:{" "}
-              {stats.timestamp
-                ? new Date(stats.timestamp).toLocaleString()
-                : "N/A"}
-            </span>
           </div>
           <div className="mt-2 md:mt-0">
             <span className="flex items-center gap-1">

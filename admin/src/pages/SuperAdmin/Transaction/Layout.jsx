@@ -630,7 +630,7 @@ const Layout = () => {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: index * 0.05 }}
-                    className="border-b border-slate-100 hover:bg-linear-to-r hover:from-slate-50 hover:to-violet-50 transition-all duration-200"
+                    className="border-b border-slate-100 hover:bg-linear-to-r hover:from-slate-50 hover:to-violet-50 transition-all duration-200 whitespace-nowrap"
                   >
                     <td className="p-4 text-sm font-medium text-slate-600 whitespace-nowrap">
                       {(pagination.currentPage - 1) * pagination.itemsPerPage + index + 1}
