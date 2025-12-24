@@ -2,5 +2,7 @@ backend/node_modules
 backend/.env
 user-app/.env
 user-app/node_modules
+admin/node_modules
+admin/.env
 app/node_modules
 .vscode
