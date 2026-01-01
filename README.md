@@ -1,1 +1,445 @@
-# PIPS-DIARY
+# Connecting to the VPS
+
+To connect your VPS server, you can use your server IP, you can create a root password and enter the server with your IP address and password credentials. But the more secure way is using an SSH key.
+
+## Creating SSH Key
+
+### For MAC OS / Linux / Windows 10 (with openssh)
+
+1. Launch the Terminal app.
+2. ```ssh-keygen -t rsa```
+3. Press ```ENTER``` to store the key in the default folder /Users/lamadev/.ssh/id_rsa).
+
+4. Type a passphrase (characters will not appear in the terminal).
+
+5. Confirm your passphrase to finish SSH Keygen. You should get an output that looks something like this:
+
+``` Your identification has been saved in /Users/lamadev/.ssh/id_rsa.
+Your public key has been saved in /Users/lamadev/.ssh/id_rsa.pub.
+The key fingerprint is:
+ae:89:72:0b:85:da:5a:f4:7c:1f:c2:43:fd:c6:44:30 lamadev@mac.local
+The key's randomart image is:
++--[ RSA 2048]----+
+|                 |
+|         .       |
+|        E .      |
+|   .   . o       |
+|  o . . S .      |
+| + + o . +       |
+|. + o = o +      |
+| o...o * o       |
+|.  oo.o .        |
++-----------------+ 
+```
+6. Copy your public SSH Key to your clipboard using the following code:
+```pbcopy < ~/.ssh/id_rsa.pub```
+
+### For Windows
+1. Download PuTTY and PuTTYgen.
+2. Open up PuTTYgen and click the ```Generate```.
+3. Copy your key.
+4. Enter a key passphrase and confirm.
+5. Save the private key.
+
+
+## Connection
+
+After copying the SSH Key go the to hosting service provider dashboard and paste your key and save. After,
+
+### For MAC OS / Linux
+
+```bash
+ssh root@<server ip address> 
+```
+
+### For Windows
+
+1. Open the PuTTY app.
+2. Enter your IP address.
+3. Open the following section:
+Connection - SSH - Auth
+4. Browse the folders and choose your private key.
+
+## First Configuration
+
+### Deleting apache server
+
+```
+systemctl stop apache2
+```
+
+```
+systemctl disable apache2
+```
+
+```
+apt remove apache2
+```
+
+to delete related dependencies:
+```
+apt autoremove
+```
+
+### Cleaning and updating server
+```
+apt clean all && sudo apt update && sudo apt dist-upgrade
+```
+
+```
+rm -rf /var/www/html
+```
+
+### Installing Nginx
+
+```
+apt install nginx
+```
+
+### Installing and configure Firewall
+
+```
+apt install ufw
+```
+
+```
+ufw enable
+```
+
+```
+ufw allow "Nginx Full"
+```
+
+## First Page
+
+#### Delete the default server configuration
+
+```
+ rm /etc/nginx/sites-available/default
+```
+
+```
+ rm /etc/nginx/sites-enabled/default
+```
+
+#### First configuration
+```
+ nano /etc/nginx/sites-available/pipsdiary
+```
+```
+server {
+  listen 80;
+
+  location / {
+        root /var/www/pipsdiary;
+        index  index.html index.htm;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        try_files $uri $uri/ /index.html;
+  }
+}
+
+```
+
+```
+ln -s /etc/nginx/sites-available/pipsdiary /etc/nginx/sites-enabled/pipsdiary
+
+```
+
+##### Write your fist message
+```
+nano /var/www/pipsdiary/index.html
+
+```
+
+##### Start Nginx and check the page
+
+```
+systemctl start nginx
+```
+
+## Uploading Apps Using Git
+
+```
+apt install git
+```
+
+```
+mkdir netflix
+```
+```
+cd netflix
+```
+
+```
+git clone <your repository>
+```
+
+## Nginx Configuration for new apps
+```
+nano /etc/nginx/sites-available/pipsdiary
+```
+```
+location /api {
+        proxy_pass http://45.90.108.107:8084;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        # HEADER BARU YANG WAJIB DITAMBAHKAN:
+        proxy_set_header X-Forwarded-Proto $scheme;  # <-- Penting
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_cache_bypass $http_upgrade;
+  }
+```
+
+##### If you check the location /api you are going to get "502" error which is good. Our configuration works. The only thing we need to is running our app
+
+```
+apt install nodejs
+```
+
+```
+apt install npm
+```
+
+```
+cd api
+```
+```
+npm install
+```
+```
+nano .env
+```
+##### Copy and paste your env file
+```
+node index.js
+```
+
+#### But if you close your ssh session here. It's gonna kill this process. To prevent this we are going to need a package which is called ```pm2```
+```
+npm i -g pm2
+```
+Let's create a new pm2 instance
+
+```
+pm2 start --name api index.js   
+```
+```
+pm2 startup ubuntu 
+```
+
+## React App Deployment
+
+```
+cd ../client
+```
+
+```
+nano .env
+```
+Paste your env file.
+
+```
+npm i
+```
+Let's create the build file
+
+```
+npm run build
+```
+
+Right now, we should move this build file into the main web file
+
+```
+rm -rf /var/www/pipsdiary/*
+```
+```
+mkdir /var/www/pipsdiary/landing-page
+```
+
+```
+cp -r dist/* /var/www/pipsdiary/landing-page
+```
+
+Let's make some server configuration
+```
+ location / {
+        root /var/www/pipsdiary/landing-page/;
+        index  index.html index.htm;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        try_files $uri $uri/ /index.html;
+  }
+
+```
+### Adding Domain
+1 - Make sure that you created your A records on your domain provider website.
+
+2 - Change your pathname from Router
+
+3 - Change your env files and add the new API address 
+
+4 - Add the following server config
+```
+server {
+ listen 80;
+ server_name pipsdiary.com www.pipsdiary.com;
+
+location / {
+ root /var/www/pipsdiary/landing-page;
+ index  index.html index.htm;
+ proxy_http_version 1.1;
+ proxy_set_header Upgrade $http_upgrade;
+ proxy_set_header Connection 'upgrade';
+ proxy_set_header Host $host;
+ proxy_cache_bypass $http_upgrade;
+ try_files $uri $uri/ /index.html;
+}
+}
+
+server {
+  listen 80;
+  server_name api.pipsdiary.com;
+  location / {
+    proxy_pass http://45.90.108.107:8084;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection 'upgrade';
+    proxy_set_header Host $host;
+    # HEADER BARU YANG WAJIB DITAMBAHKAN:
+    proxy_set_header X-Forwarded-Proto $scheme;  # <-- Penting
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_cache_bypass $http_upgrade;
+    }
+}
+
+server {
+  listen 80;
+  server_name admin.pipsdiary.com;
+  location / {
+    root /var/www/pipsdiary/admin;
+    index  index.html index.htm;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection 'upgrade';
+    proxy_set_header Host $host;
+    proxy_cache_bypass $http_upgrade;
+    try_files $uri $uri/ /index.html;
+  }
+}
+
+server {
+  listen 80;
+  server_name app.pipsdiary.com;
+  location / {
+    root /var/www/pipsdiary/app;
+    index  index.html index.htm;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection 'upgrade';
+    proxy_set_header Host $host;
+    proxy_cache_bypass $http_upgrade;
+    try_files $uri $uri/ /index.html;
+  }
+}
+```
+
+## SSL Certification
+```
+apt install certbot python3-certbot-nginx
+```
+
+Make sure that Nginx Full rule is available
+```
+ufw status
+```
+
+```
+certbot --nginx -d example.com -d www.example.com
+```
+
+Let’s Encrypt’s certificates are only valid for ninety days. To set a timer to validate automatically:
+```
+systemctl status certbot.timer
+```
+
+## Installing Certbot
+1 - Install Snap Core and Refresh:
+```
+sudo snap install core; sudo snap refresh core
+```
+2 - Install Certbot:
+```
+sudo snap install --classic certbot
+```
+3 - Create a symbolic link (optional, for easier access):
+```
+sudo ln -s /snap/bin/certbot /usr/bin/certbot
+```
+
+## Obtaining and Installing the SSL Certificate
+Catatan Penting: Pastikan konfigurasi Nginx untuk domain pipsdiary.com sudah aktif. Jika Anda sudah membuat file konfigurasi di /etc/nginx/sites-available/pipsdiary namun belum mengaktifkannya, jalankan perintah berikut terlebih dahulu:
+```
+sudo ln -s /etc/nginx/sites-available/pipsdiary /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+Setelah itu, jalankan Certbot dengan plugin Nginx untuk mendapatkan dan menginstal sertifikat SSL.
+```
+sudo certbot --nginx -d pipsdiary.com -d www.pipsdiary.com
+```
+
+## Manual SSL Certificate Renewal
+Jika Anda perlu memperpanjang sertifikat secara manual (misalnya karena sertifikat sudah kadaluarsa atau ingin memastikan), ikuti langkah-langkah berikut:
+
+1 - Cek status sertifikat yang saat ini terinstal:
+```
+sudo certbot certificates
+```
+2 - Jalankan perintah renew untuk memperpanjang semua sertifikat yang mendekati kadaluarsa:
+```
+sudo certbot renew
+```
+3 - Muat ulang Nginx untuk menerapkan sertifikat yang baru:
+```
+sudo systemctl reload nginx
+```
+
+## Database Setup and Backend Deployment
+Berikut adalah langkah-langkah untuk mengimpor database SQL dan menjalankan aplikasi backend untuk proyek Pips Diary.
+
+1 - Membuat Database
+Masuk ke MySQL dan buat database baru:
+```
+mysql -u root -p
+```
+Kemudian jalankan perintah SQL berikut untuk membuat database:
+```
+CREATE DATABASE db_pipsdiary;
+EXIT;
+```
+2 - Mengatasi Masalah Collation (Opsional)
+Jika file SQL Anda memiliki collation utf8mb4_0900_ai_ci yang tidak didukung oleh versi MySQL Anda, Anda bisa menggantinya dengan utf8mb4_general_ci dengan perintah:
+```
+sed -i 's/utf8mb4_0900_ai_ci/utf8mb4_general_ci/g' /root/pipsdiary/db_pipsdiary.sql
+```
+3 - Mengimpor Database
+Impor file SQL ke dalam database yang telah dibuat. Pastikan file SQL berada di lokasi yang benar:
+```
+mysql -u root -p db_pipsdiary < /root/pipsdiary/db_pipsdiary.sql
+```
+4 - Menjalankan Aplikasi Backend dengan PM2
+```
+cd /root/pipsdiary/backend
+pm2 start src/app.js --name pipsdiary-backend
+```
+Pastikan Anda telah menginstal PM2 sebelumnya (seperti yang dijelaskan di bagian sebelumnya).
