@@ -443,3 +443,12 @@ cd /root/pipsdiary/backend
 pm2 start src/app.js --name pipsdiary-backend
 ```
 Pastikan Anda telah menginstal PM2 sebelumnya (seperti yang dijelaskan di bagian sebelumnya).
+
+5 - Perintah ini membuat PM2 otomatis jalan saat server reboot.
+```
+pm2 startup
+```
+6 - Perintah ini menyimpan daftar aplikasi yang sedang berjalan sekarang.
+```
+pm2 save
+```
