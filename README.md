@@ -425,7 +425,30 @@ mysql -u root -p
 Kemudian jalankan perintah SQL berikut untuk membuat database:
 ```
 CREATE DATABASE db_pipsdiary;
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
+```
+Buat User Khusus (Jangan pakai root)
+```
+CREATE USER 'pipsdiary_user'@'localhost'
+IDENTIFIED BY 'PasswordKuat123!';
+```
+Berikan hak akes ke database tersebut
+```
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX
+ON db_pipsdiary.* TO 'pipsdiary_user'@'localhost';
+```
+Lalu:
+```
+FLUSH PRIVILEGES;
+```
+Keluar dari MYSQL
+```
 EXIT;
+```
+Test Login pakai user baru
+```
+mysql -u pipsdiary_user -p
 ```
 2 - Mengatasi Masalah Collation (Opsional)
 Jika file SQL Anda memiliki collation utf8mb4_0900_ai_ci yang tidak didukung oleh versi MySQL Anda, Anda bisa menggantinya dengan utf8mb4_general_ci dengan perintah:
