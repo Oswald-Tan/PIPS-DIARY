@@ -309,6 +309,13 @@ location / {
 server {
   listen 80;
   server_name api.pipsdiary.com;
+
+  # jika hanya buka domainnya saja
+  location = / {
+    return 301 https://zimpto.com;
+  }
+
+  # semua endpoint API tetap jalan
   location / {
     proxy_pass http://45.90.108.107:8084;
     proxy_http_version 1.1;
